@@ -1,0 +1,106 @@
+Key details -  Agent , GPT- 4.1
+
+
+Prompt 1- 
+
+@workspace
+
+Act as a Senior Test Analyst. Your goal is to find gaps in our manual test suite by performing a 3-way analysis.
+
+1.  The ultimate source of truth for application behavior is the React and php source code. Analyze it to understand the application's complete functionality, including all features, APIs, and user interactions.
+2.  Use the `.txt` documentation files to understand the *Cases* functionality and business context.
+3.  Analyze the existing test cases in `manual_tests.csv` to understand what is *already being tested*.
+
+Now, compare the complete functionality discovered in the source code against the tests in the CSV. Create a bulleted list of specific functionalities, user flows, API endpoints, or edge cases that are present in the code but are NOT covered by the existing manual tests.
+
+Output - 
+1. Business/Workflow Gaps
+•	Case Stages Not Explicitly Tested:
+o	Budget Requested, Budget Submitted, Budget Rejected, Budget Approved, Accepted by Investigator, Rejected by Investigator, Completed by Investigator: While some are mentioned, there are no explicit tests for transitions, notifications, or edge cases for each stage.
+o	Case Closed without Investigation: No test for closing a case before an investigation is ordered.
+o	Case Rejected due to incomplete information: No test for the full reject/resubmit loop (including third-party notification and resubmission).
+o	Permanent Deletion (Code 99): No test for the "Permanently Delete Case" flow and its audit log.
+•	Case Folder Tab Customization:
+o	Dynamic/Optional Tabs: No tests for cases with fewer/more tabs (e.g., manually created cases vs. engagement-linked cases).
+o	Inheritance of Data from Engagements: No test for data inheritance (Type, Category, Region, Department) when a case is created from an engagement.
+•	Audit Log:
+o	Audit Log Tab: No test for viewing the audit log, filtering, or verifying that all actions are logged (including deletions and reassignments).
+•	Reviewer Tab:
+o	Needs Review/Reviewed Workflow: No test for marking items as "Needs Review" or "Reviewed", or for the mitigation note process.
+ 
+2. User Actions & Edge Cases
+•	Case Action Buttons:
+o	Convert: No test for the "Convert" button to escalate a questionnaire to an investigation, including error handling if required fields (street/city) are missing.
+o	Print: No test for the "Print" button's PDF output and download.
+o	Reassign: No test for notification logic (who gets notified in each reassignment scenario).
+o	Accept: No test for the "Accept" button to close a case after investigator completion.
+•	Attachment Handling:
+o	Attachment Upload/Download: No test for uploading, downloading, or deleting attachments in the Attachments tab or during Reject/Close.
+o	Attachment Size/Type Validation: No test for file size/type restrictions or error handling.
+•	Field Validations:
+o	Required Fields: No test for error handling when required fields (e.g., street, city, country) are missing during conversion or case creation.
+o	Case Type Recommendation: No test for warning/error when the selected case type differs from the recommended scope and no explanation is provided.
+ 
+3. API/Backend Gaps
+•	Case List API:
+o	Filtering/Sorting: No test for all filter/sort combinations, especially for custom fields and advanced search.
+o	Pagination Edge Cases: No test for very large result sets, or for edge cases like empty results.
+•	Security/Access Control:
+o	Role-Based Access: No test for access restrictions (e.g., vendor, read-only, admin) for each action (add, edit, reject, accept, delete).
+o	Session/Token Validation: No test for invalid/expired tokens or session timeouts during case actions.
+•	Linked/Chained Cases:
+o	Linked Case Deletion: No test for preventing deletion of a case that is part of a renewal chain.
+o	Data Integrity: No test for data integrity when cases are linked/unlinked.
+ 
+4. Notifications & Emails
+•	Email Triggers:
+o	Notification Emails: No test for all email notifications (e.g., on assignment, completion, rejection, reassignment, acceptance).
+o	Email Content: No test for the correctness of email content, recipients, and triggers.
+ 
+5. Special/Edge Flows
+•	Sanctioned/Prohibited Countries:
+o	Notification on Sanctioned Country: No test for the notification logic when a case is created for a sanctioned country.
+•	Bilingual Reports:
+o	Bilingual Report Request: No test for requesting, saving, or displaying bilingual reports.
+•	Bulk/Multi-Assign:
+o	Bulk Assignment: No test for multi-assigning cases or handling the maximum allowed cases for bulk actions.
+ 
+Recommendations
+•	Add tests for each case stage transition, including edge cases and notifications.
+•	Add tests for all action buttons, especially "Convert", "Print", "Accept", and "Reassign", including their side effects (notifications, audit logs).
+•	Add tests for dynamic tab visibility and data inheritance in the Case Folder.
+•	Add tests for all attachment operations and validations.
+•	Add tests for audit log completeness and filtering.
+•	Add tests for all API filter/sort/pagination combinations and error handling.
+•	Add tests for all email notifications and their content.
+•	Add tests for access control and session/token validation.
+•	Add tests for special flows (sanctioned countries, bilingual reports, bulk assignment).
+
+Prompt 2- 
+a)	
+•	@workspace
+
+Now, carefully study the format, style, columns, and level of detail of the existing test cases in `CaseMgmt.csv`.
+
+For the gap we just identified – “Business/Workflow Gaps" - please write a brand new, complete manual test case.
+
+Ensure the new test case perfectly matches the style of the existing ones and includes all necessary details for a tester to execute it. Output the result in a CSV-compatible format.
+
+
+Output – test.csv
+b) 
+@workspace
+Now, carefully study the format, style, columns, and level of detail of the existing test cases in `CaseMgmt.csv`.
+For the  earlier identified gap in “Business/Workflow  For Case stages that are not explicitly tested i.e. “Budget Requested, Budget Submitted, Budget Rejected, Budget Approved, Accepted by Investigator, Rejected by Investigator, Completed by Investigator” where no explicit test cases exists for transition, notifications or edge cases for each stage  - please write a brand new, complete manual test case.
+Ensure the new test case perfectly matches the style of the existing ones and includes all necessary details for a tester to execute it. Output the result in a CSV-compatible format.
+
+Output – Test 1 file 
+
+c)
+ Now, carefully study the format, style, columns, and level of detail of the existing test cases in `CaseMgmt.csv`.
+For the  earlier identified gap in “Business/Workflow For Case stages that are not explicitly tested i.e. “Budget Requested, Budget Submitted, Budget Rejected, Budget Approved, Accepted by Investigator, Rejected by Investigator, Completed by Investigator” where no explicit test cases exists for transition, notifications or edge cases for each stage  - please write brand new, complete manual test cases to cover all possible scenarios like positive, negative or edge cases for each.
+Ensure the new test case perfectly matches the style of the existing ones and includes all necessary details for a tester to execute it. Output the result in a CSV-compatible format.
+Output – Test 2 file 
+
+
+
