@@ -1,0 +1,1308 @@
+﻿Key,Name,Status,Precondition,Objective,Folder,Priority,Component,Labels,Owner,Estimated Time,Coverage (Issues),Coverage (Pages),Test Script (Step-by-Step) - Step,Test Script (Step-by-Step) - Test Data,Test Script (Step-by-Step) - Expected Result,Test Script (Plain Text),Test Script (BDD)
+TPM-T2498,To Verify whether the User is able access Case Management tab under dash board,Approved,"Logged into TPM Application as
+User: Superadmin with valid username and password","To Verify whether the User is able access Case Management tab under dash
+board",/TPM_Automation (CoE)/CaseManagement,Normal,,"P1, Automated-CypressUI",,,"TPM-11695, TPM-11747",,Click on Case Management Tab,Log in to TPM application,"User should be able to click the Case Management tab by default Case List
+tab opens under that user should see Case List Filter label with ? Icon,
+Reset View link,List coloum sorting fields,Pagination and Case list tables.",,
+TPM-T2499,To Verify whether the User able to click search field icon next Case Name Field and select search values in Case List tab  and  able to restore default Case Name list using Reset View link under Case List tab,Approved,,"To Verify whether the User able to click search field icon next Case Name 
+Field and select search values in Case List tab and able to restore default 
+Case Name list using Reset View link under Case List tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P1,,,"TPM-11695, TPM-11748",,"1. Click on Case Management Tab
+2. Click search field icon next Case Name Field
+3. Click on search field Icon
+4. Enter value in search field
+5. Click on Reset View link",Log in to TPM application,"1. User should able to see Reset View link with sorting fields like Case 
+Name with blank field, Status dropdown field with default value Only Open 
+Cases,
+Stage dropdown field with default value All Open Stages and Region dropdown 
+field with default value Any
+2. User should be able click search field icon and it shows search field 
+values like Case Name, case Number,Comapny Name,Description,Country,Street 
+Address,Requester,Department
+3. User should be able click and select search field value and the same 
+seach field value reflects above the search box
+4. User able to enter value and it will give list of test cases for entered 
+value
+5. User should be able click Reset View link and it will restore default 
+filter value for Case Name with blank field",,
+TPM-T2500,To Verify whether the User able to access List column sorting and JumpTo dropdown pagination field under Case List tab,Approved,,"To Verify whether the User able to access List column sorting under Case
+List tab",/TPM_Automation (CoE)/CaseManagement,Normal,,"P1, Automated-CypressUI",,,"TPM-11695, TPM-11851",,"1. Click on Case Management Tab
+2. Validate user able to see List column sorting, pagination fields
+3. Click search field icon next to Case Name Field
+4. Click on search field value
+5. Enter value in search field
+6. Click Status dropdown field
+7. Click Stage dropdown field
+8. Click Region dropdown field
+9. Click JumpTo dropdown field
+10. Select any page number in JumpTo dropdown field",,"1. User should able to see Reset View link with sorting fields like Case 
+Name with blank field, Status dropdown field with default value Only Open 
+Cases, Stage dropdown field with default value All Open Stages and Region 
+dropdown field with default value Any
+2. User should be able see List column sorting, pagination with sorting 
+fields like Case Name,Status, stage, region and Paginations with Records 
+count, Page count,JumpTo dropdown field,Records Per Page dropdown field and 
+first,prev,next,last links with symbols
+3. User should be able click search field icon and it shows search field 
+values like Case Name, case Number,Comapny Name,Description,Country,Street 
+Address,Requester,Department
+4. User should be able click and select search field value and the same 
+seach field value reflects above the search box
+5. User able to enter value in search field
+6. User should be able click and select values in Status dropdown field 
+with vaues All Cases, Only Open Cases and Only closed Cases with displaying 
+default value as Only Open Status
+7. User should be able click and select values in Stage dropdown field with 
+displaying default value as All Open Stages
+8. User should be able click and select values in Region dropdown field 
+with displaying default value as Choose and able see the case list with 
+selected sorting values
+9. User should be able click JumpTo dropdown field and it shows all the 
+page numbers.
+10. User should be able to select page number value in JumpTo dropdown 
+field,it jumps to that perticular page number and this can be validated by 
+seeing Page label which gives curent page count",,
+TPM-T2501,To Verify whether the User able to access View action item under Case Folder tab,Approved,,"To Verify whether the User able to access View action item under Case
+Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,"P1, Automated-CypressUI",,,"TPM-11695, TPM-11852",,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on View action items",Log in to TPM application,"1. Should be able to log into and access case management tab
+2. User should be able click case number under Case List sub tab and it 
+opens case details under Case Folder subtab and see View action item under 
+Case Folder sub tab
+3. User should be able click view action item and it will open Profile 
+Detail sub tab under Third Party Management and gives profile details with 
+which this case is added",,
+TPM-T2502,To Verify whether the User able to send invite under Case Folder tab,Approved,,"To Verify whether the User able to send invite under Case Folder tab
+
+Note - Partially Automated due to cypress limitation",/TPM_Automation (CoE)/CaseManagement,Normal,,"P1, FutureConsideration, PartiallyAutomated",,,"TPM-11695, TPM-11911",,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Invite/Re-invite action items
+4. Click on Go button
+5. Validate user able to see Associated 3P Profile name and Point Of 
+Contact fields
+6. Click on Name field
+7. Click on Position field
+8. Click on Phone Number field
+9. Click on Email Address field
+10. Click on Intake Form Version dropdown field
+11. Click on Language dropdown field
+12. Click on radio buttons Prospective and Current under Partner Status
+13. Click on Send Inviatation button",Log in to TPM application,"1. should able to login and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens case details under Case Folder subtab
+3. User should be able click Invite/Re-invite action item and Intake Form 
+Invitation Menu label pop up opens with close icon having different Intake 
+Forms along with Go button
+4. User able to click on go button and SEND INTAKE FORM INVITATION popup 
+opens with Send Invitation and Cancel button
+5. User able to see Associated 3P Profile name and Point Of Contact fields 
+like Name,Position,Phone Number,Email Address,Intake Form Version 
+dropdown,Language dropdown and Partner Status with radio button values 
+Prospective and Current
+6. User able to click and enter value in the Name field
+7. User able to click and enter value in the Position field
+8. User able to click and enter value in the Phone Number field
+9. User able to click and enter value in the Email Address field
+10. User able to click and select value in the Intake Form Version dropdown 
+field
+11. User able to click and select value in the Language dropdown field
+12.User able to click on radio buttons Prospective and Current under 
+Partner Status
+13. User able to click on Send Inviatation button",,
+TPM-T2503,"TPM_CM_To Verify whether the User able to access Company Tab,Personnel Tab,Business Practices Tab,Relationship Tab, Workflow Tab, Attachment Tab in Case Folder subtab and able to attach documents in Attachment Tab",Approved,,"To Verify whether the User able to access Company Tab in Case Folder subtab
+under Case Management tab
+
+Note - Not able to automate due to cypress iFarme limitation ",/TPM_Automation (CoE)/CaseManagement,Normal,,"P1, FutureConsideration",,,"TPM-11695, TPM-11940",,"1. Click on Case Management Tab
+2. Click on any of the case under Case List
+3. Click on Company tab
+4. Click on Personnel tab
+5. Click on Bussiness Practices tab
+6. Click on Relationship tab
+7. Click on Workflow tab
+8. Click on Attachment tab
+9. Click on Add New button
+10. Click on Browse button
+11. Click and Select value in Choose Catagory dropdown field
+12. Enter value in Provide a description of the document you are uploading
+field
+13. Click on Upload button",Log in to TPM application,"1. Should able to log in TPM application and access Case Management tab
+2. User should able to click and Case Folder tab populates with case 
+details along with tabs like Summery(Default Tab),Personnel,Bussiness 
+Practices,Relationship, Training,Workflow, Attachments, Custom Fields, 
+Notes, Audit Log and under Company tab we can see CASE INFORMATION, 
+INVESTIGATOR INFORMATION, Company Details and Main Point Of Contact.
+3. Should able to click and it will give Case Information, Third Party 
+Details, Point of Contact and Investigation Information
+4. User should able to click and it will give list of different tables for 
+PRINCIPLE INVESTIGATOR, OWNERSHIP, BOARD OF DIRECTORS, KEY MANAGEMENT,KEY 
+CONSULTANT with details
+5. User should able to click and it will give the details about the 
+industry
+6. User should able to click and it will give the PARENT, SUBSIDIARY & 
+AFFILIATED COMPANY(S) deatails in a table formate, Ralationship with the 
+client,Governament Relationships and references
+7. User should able to click and it will give the workflow details of the 
+case in a tabular form
+8. User should able to click and it will give the list of attachments for 
+that perticular case in a table formate along with Add New button
+9. User should able to click and it will give the list of attachments for 
+that perticular case in a table formate along with Add New button
+10. User should able to click and attachment window opens with fields like 
+Choose File with Browse button,ChooseCatagory dropdown field,Provide a 
+description of the document you are uploading field along with Upload and 
+Close button with note like File size limit 40MB
+11. User should able to click and select the value
+12. User Should able to enter value in the field
+13. User should able to click and and the selected file will gets uploaded 
+and shown up in the attachement table with Edit and Delete icons",,
+TPM-T2504,To Verify whether the User able to access Reject/Close action item under Case Folder tab,Approved,,"To Verify whether the User able to access Reject/Close action item under
+Case Folder tab
+
+Note - Partially Automated due to cypress limitation, 
+after click on update/close button, the cypress test runner gets down 
+(might be some iframe issue.). can't assert the form closeer functionality",/TPM_Automation (CoE)/CaseManagement,Normal,,"P1, FutureConsideration, PartiallyAutomated",,,"TPM-11695, TPM-11941",,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Reject/Close action items
+4. Select dropdown value in This partner's status of Reject/Close is based 
+on the following reason field
+5. Click on Attach investigation report or other documents link
+6. Click on Choose File button under Create Attachment
+7. Click and Select dropdown value in Choose Category field
+8. Enter value in Provide a description of the attachment you are uploading 
+field
+9. Click on Upload button
+10. Click on Choose File button under Create Attachment
+11. Click and Select dropdown value in Choose Category field
+12. Enter value in Provide a description of the attachment you are 
+uploading field
+13. Click on Upload button
+14. Click on Ok button
+15. Click on Choose File button under Create Attachment
+16. Click and Select dropdown value in Choose Category field
+17. Enter value in Provide a description of the attachment you are 
+uploading field
+18. Click on Upload button
+19. Click on Stop button
+20. Click on Ok button
+21. Click on Choose File button under Create Attachment
+22. Click on Upload button
+23. Click on Done button
+24. Enter value in Explanation field
+25. Click on Update|Close button",Log in to TPM application,"1. Should able to login and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens case details under Case Folder subtab
+3. User should be able click Reject/Close action item and REJECT/CLOSE pop 
+up page opens with Upadate|Close and Cancel button
+4. User able to select dropdown value in This partner's status of 
+Reject/Close is based on the following reason field with values ex: 
+97-Closed-No Contract and reject Code 1
+5. User able to click on Attach investigation report or other documents 
+link, Additional Detail Attachments pop up opens with Attachments details, 
+Creat Attachment fields with Upload and Done buttons
+6. User able to click on Choose File button under Create Attachment, Window 
+popup opens to select files and after selecting the file, file name will 
+show up next to Choose File button and file size limit 40MB.
+7. User able to click and select dropdown value in Choose Category field 
+with values Contracts, Email Correspondence, Justification 
+Form,Other,Pictures and Third Party Marking Materials
+8. User able to enter value in Provide a description of the attachment you 
+are uploading field
+9. User able to click on Upload button, file gets upload and it will gets 
+store in Attachments table with Edit attachments and Delete attachments 
+options
+10. User able to click on Choose File button under Create Attachment, 
+Window popup opens to select files and selecting the file name without 
+extension and file size limit 40MB. And choose a file without extension.
+11. User able to click and select dropdown value in Choose Category field 
+with values Contracts, Email Correspondence, Justification Form, 
+Other,Pictures and Third Party Marking Materials
+12. User able to enter value in Provide a description of the attachment you 
+are uploading field
+13. User able to click on Upload button, Upload Failed pop up appears with 
+message File name must include an extension (e.g,sample.doc) along with Ok 
+button
+14. User able to click on Ok button, Upload Failed pop up disappears and 
+lands back on Additional Detail Attachments pop up page
+15. User able to click on Choose File button under Create Attachment, 
+Window popup opens to select files and selecting the file name with 
+extension and file size limit 40MB.
+16. User able to click and select dropdown value in Choose Category field 
+with values Contracts,Email Correspondence, Justification 
+Form,Other,Pictures and Third Party Marking Materials
+17. Enter Value in Provide a description of the attachment you are 
+uploading field
+18. User able to click on Upload button, Upload starts with Stop button
+19. User able to click on Stop button, File Upload Aborted pop up appears 
+with message User cancelled upload along with Ok button
+20. User able to click on Ok button, File Upload Aborted pop up disappears 
+and lands back on Additional Detail Attachments pop up page
+21. User able to click on Choose File button under Create Attachment, 
+Window popup opens to select files and selecting the file name with 
+extension and file size limit exceeds 40MB. and choose a file with size 
+execeding 40MB.
+22. User should able to get error pop with message file size Exceeds 40 MB
+23. User able to click on Done button and Additional Detail Attachments pop 
+up disaapears ,lands back on REJECT/CLOSE pop up page and saved attachemts 
+will be listed under List of documents attached to this case field
+24. User able to enter value in Explanation field
+25. User able to click on Update|Close button and pop page disappears lands 
+back on the Case List sub tab and the particular case gets updated with the 
+reject region",,
+TPM-T2505,TPM_CM_To Verify whether the User able to access Print action item,Approved,,"To Verify whether the User able to access Print action item under Case
+Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,"P1, Automated-CypressUI",,,"TPM-11695, TPM-11942",,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Print action items",,"1. Should able to log in TPM application and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens case details under Case Folder subtab
+3. User should be able click Print action item and case detail document 
+will get downloaded in to local in pdf format",,
+TPM-T2506,TPM_CM_To Verify whether the User able to access Reassign action item,Approved,,"To Verify whether the User able to access Reassign action item under Case
+Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P1,,,"TPM-11695, TPM-11943",,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Reassign action items
+4. Click and Select value from Owner/Requester dropdown field
+5. Click and select value from Region dropdown field
+6. Click and select value from Department dropdown field
+7. Click and select value from Billing Unit dropdown field
+8. Click on Reassign button",Log in to TPM application,"1. Should able to login and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens case details under Case Folder subtab
+3. User should be able click Reassign action item and Reassign Case 
+Elements pop up page opens with Case Name and Case Number label with fields 
+along with Reassign and Cancel button
+4. User able to click Owner/Requester dropdown field and it will show list 
+of Owner/Requester names and select value from Owner/Requester dropdown 
+field
+5.User able to clickand select value from Region dropdown field with values 
+like AI Investigator (DO NOT USE), Antarctica, APAC (Hong Kong), APAC 
+(South), Asia Pacific, EMEA, LATAM, NA and US and Canada
+6. User able to clickand select value from Department dropdown field with 
+values like Adjudication, Consumer Products, Corporate Groups, Human 
+Health, Research and Development, Sales and Sourcing
+7. User able to clickand select value from Billing Unit dropdown field with 
+value like Billing Unit-123
+8. User able to click on Reassign button, Reassign Case Elements pop up 
+page disaapears and assigned name will show up in the requester column in 
+the case list",,
+TPM-T2507,TPM_CM_To Verify whether the User able to access Edit action item,Approved,,"To Verify whether the User able to access Edit action item under Case
+Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P1,,,"TPM-11695, TPM-11944",,"1. Click on Case Management Tab
+2. Click and select Draft value in Stage dropdown field and Click on case
+number under Case List sub tab
+3. Click on Edit action item
+4. Enter nothing in all required fields
+5. Click on Continue|Enter Details button
+6. Click on Close button
+7. Click the ""Name this case"" text field
+8. Choose the type from ""type of case"" dropdown
+9. Click the Brief Note/Billing Information adjustable text box
+10. Click ""Region"" dropdown
+11. Click ""Country"" dropdown
+12. Click ""State/Province"" dropdown
+13. Click ""Department"" dropdown
+14. Click ""Billing Unit"" dropdown
+15. Click the ""Continue|Enter Details"" button
+16. Click Save and Close button
+17. Click on Edit action item
+18. Click on Continue|Enter Details button
+19. Enter nothing in all required fields
+20. Click on Continue|Enter Details button
+21. Click on close button
+22. Click and select the Status type of the company
+23. Click Relationship type
+24. Click the ""Legal form of company"" dropdown
+25. Click and Enter the company Name
+26. Click and Enter the ""Alternate Trade Name(s):""
+27. Click and enter the ""Address1, Address2""
+28. Click and enter the ""City""
+29. Click and enter the ""Country""
+30. Click ""State/Province"" dropdown
+31. Click and enter the ""Postal code""
+32. Click the Add/Edit under principals
+33. Click +Add three more Principals to add principal
+34. Click +Add three more Principals to add principal
+35. Enter something in Principal and relationship title fields.
+36. Go to Check that all apply and click to add relationship title and
+Principal
+37. Click the update button
+38. Click ""Contiunue|Enter Details"" button
+39. Click to Yes or No to select Are they aware that they will be 
+investigated?
+40. Click on Click here to Attach Questionnaire or other documents
+41. Click choose button under CREATE ATTACHMENT section
+42. Click the choose category
+43. Click and enter the text in description
+44. Click the Upload button
+45. Click Done after uploading the document
+46. Click the Continue|Enter Details button
+47. Click the ""Do not Submit|Close"" button
+48. Click on Edit action item
+49. Click on Continue|Enter Details button
+50. Click on Continue|Enter Details button
+51. Click on Continue|Enter Details button
+52. Select the AUTHORIZATION checkbox.
+53. Click the ""Submit to Investigator"" button",Log in to TPM application,"1. Should able to log in TPM application and access Case Management tab
+2. User should be able Click and select Draft value in Stage dropdown field
+and case number under Case List sub tab and it opens case details under
+Case Folder subtab with Edit action item
+3. User should be able click Edit action item and UPDATE CASE FOLDER pop up 
+page opens Continue|Enter Details and Cancel button and Name This Case, 
+Type Of Case, Brief Note/Billing Information, region, Country and Billing 
+Unit are the required fields
+4. User should enter nothing in all the required fields
+5. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message
+You must enter a Case Name.
+You must Choose Type of case
+You must Choose a Region.
+You must Choose a Country. along with Close button
+6. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+7. Should be able to add/enter the text
+8. Should be able to select the type from ""Type of case"" dropdown
+9. Should be add the enter the data in the note text box
+10. Should be able to select the region from the region dropdown
+11. Should be able to select the country from the country dropdown
+12. Should be able to select the State/Province from the State/Province 
+dropdown
+13. Should be able to select the Department from the Department dropdown
+14. Should be able to select the Billing Unit from the Billing Unit 
+dropdown
+15. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province, dropdowns and Postcode: 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+16. User should able to click Save and Close and DUE DILIGENCE KEY INFO 
+FORM - COMPANY pop up gets closed ,the entered fields will get saved as a 
+draft in case management list.
+17. User should be able click Edit action item and UPDATE CASE FOLDER pop 
+up page opens Continue|Enter Details and Cancel button and Name This Case, 
+Type Of Case, Brief Note/Billing Information, region, Country and Billing 
+Unit are the required fields
+18. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province, dropdowns and Postcode: 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+19. User should enter nothing in all the required fields
+20. User should be able to click on Continue|Enter button and Error pop up 
+page
+opens with message The following errors have occurred.Please correct the
+following errors listed below.
+You must enter a Subject Name for this investigation.
+You must enter a Street Address for this Subject.
+You must enter a City for this Subject.
+You must Choose a Country.
+You must tell us if you want the Field Investigation performed on the 
+Principals. along with Close button
+21. Should be able to click close and error pop will gets disappear
+22. Should be able to select the Status type radio buttons ""Propsective"" 
+and ""Current""
+23. Should be able to select the relationship type from dropdown
+24. Should be able to select the legal form from the Legal Form of Company: 
+dropdown
+25. Should be able to add the Name of company
+26. Should be able to add the ""Alternate Trade Name(s):""
+27. Should be able to add the ""Address1, Address2""
+28. Should be able to add the ""City""
+29. Should be able to select and add the country from the dropdown
+30. Should be able to select and add the State/Province from the dropdown
+31. Should be able to select and add the postal code
+32. Should be able to navigate to the ""EDIT | ADD PRINCIPALS"" page, with 
+Update and Cancel buttonsShould be able to see the ""EDIT | ADD PRINCIPALS "" 
+page with Principal 1 and Relationship/Title text boxes with Role and Check 
+that Apply check box options +Add three More Principals option
+33. Should be able to add the more three more principals
+34. Should able to click 3 more fields will gets add, total 10 principles 
+we can add
+35. should be able to enter in principal and Relationship title fields.
+36. Should be able to add the check boxes for both Prinicpal and 
+Relationship title related roles
+37. Navigate back to previous ""DUE DILIGENCE KEY INFO FORM - COMPANY""
+page/window
+38. Should Navigate to "" DUE DILIGENCE KEY INFO FORM - COMPANY"" window with
+Information Questionnaire with Go Back|Edit, Continue|Enter Details, Save 
+and Close and Cancel options
+Should be able to see and select the ""Are they aware that they will be 
+investigated? with Yes and No radio buttons
+Should be able to see and enter the Name, Position, Telephone in text 
+fields
+Should be able to see and add the document using a link ""Click here to 
+Attach Questionnaire or other documents.""
+Should be able to see the ""List of documents attached to this case:"" 
+text/info box
+Should be able to see the ""I have reviewed and attached the Information 
+Questionnaire"" and No Questionnaire Attached (Explanation provided below) 
+text field
+39. Should be able to select the raido buttons Yes or No.
+40. Should navigate to the ""Additional Detail Attachments: GL Test Vendor "" 
+window/page Should be able to see the Attachments table with headers like 
+Description/Type of Attachment, File Name, Category, Edit Attachment, 
+Delete AttachmentShould be able to see the CREATE ATTACHMENT section which 
+has the Choose File, Choose category, Description of attachment box, with 
+File size limit 40MB, and Upload and Done buttons
+41. Should open the system search dialog box and Select the document from 
+system, document should get attached
+42. Should be able to choose the category
+43. Should be able to add the text
+44. Should be able to see the uploading bar with Stop button Should be able 
+to see after uploading the attachment the Attachment table should get 
+updated by the attachment added and should be able to see the
+edit and delete option in attachment table above CREATE ATTACHMENT section
+45. Should navigate back to the previous page ""DUE DILIGENCE KEY INFO FORM 
+- COMPANY"" Should be able to see the the document under ""List of documents 
+attached to this case"" with Description and FileName mentioned inside it.
+46. Should be able to Navigate to INVESTIGATION ORDER page
+47. Should close the window and navigate back to Case Folder
+48.User should be able click Edit action item and UPDATE CASE FOLDER pop up 
+page opens Continue|Enter Details and Cancel button and Name This Case, 
+Type Of Case, Brief Note/Billing Information, region, Country and Billing 
+Unit are the required fields
+49. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province, dropdowns and Postcode: 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+50. Should Navigate to "" DUE DILIGENCE KEY INFO FORM -COMPANY "" window with
+Information Questionnaire with Go Back|Edit, Continue|Enter Details, Save 
+and Close and Cancel options
+Should be able to see and select the ""Are they aware that they will be 
+investigated? with Yes and No radio buttons
+Should be able to see and enter the Name, Position, Telephone in text 
+fields
+Should be able to see and add the document using a link ""Click here to 
+Attach Questionnaire or other documents.""
+Should be able to see the ""List of documents attached to this case:"" 
+text/info box
+Should be able to see the ""I have reviewed and attached the Information 
+Questionnaire"" and No Questionnaire Attached (Explanation provided below) 
+text field
+51. Should be able to Navigate to INVESTIGATION ORDER page
+52. Should be able to select the AUTHORIZATION checkbox
+53. Should be able to see the case added to the 3P profile and Navigate to 
+case list",,
+TPM-T2540,To Verify whether the User able to access Case List Filters icon under Case List tab,Approved,,"To Verify whether the User able to access Case List Filters icon under Case
+List tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,,,"TPM-11695, TPM-15098",,"1. Click on the Case Management Tab
+2. Click on Case List Filters icon",Log in to TPM application,"1. User should be able to click the Case Management tab by default Case 
+List tab opens under that user should see Case List Filter label with ? 
+Icon,
+Reset View link,List coloum sorting fields,Pagination and Case list tables.
+2. User should be able to click the Case List Filters icon,upon clicking 
+About
+Search labelled pop up box appears with different heading labels like Quick
+Search,Advanced Find and Other Search Features along with � icon and Ok 
+button",,
+TPM-T2541,"To Verify whether the User able to restore default Status and default stage list using Reset View link under Case List tab and User able to access first<<,prev<,next>,last>> pagination icons under Case List tab",Approved,,"To Verify whether the User able to restore default Status and default stage 
+list using Reset View link under Case List tab and User able to access 
+first<<,prev<,next>,last>> pagination icons under Case List tab",/TPM_Automation (CoE)/CaseManagement,Normal,,"P2, Review",,,"TPM-11695, TPM-15099",,"1. Click on Case Management Tab
+2. Click and Select dropdown value in Status field
+3. Click on Reset View link
+4. Click and Select dropdown value in Stage field
+5. Click on Reset View link
+6. Click on next link with symbol >>
+7. Click on last link with symbol >
+8. Click on Prev link with symbol <
+9. Click on first link with symbol <<",Log in to TPM application,"1. User should able to see Reset View link with sorting fields like Case 
+Name with blank field, Status dropdown field with default value Only Open 
+Cases, Stage dropdown field with default value All Open Stages and Region 
+dropdown field with default value Any
+2. User should be able to Click Status dropdown field and select dropdown 
+values like All Cases, Only Open Cases and Only Closed Cases and it will 
+give list of cases for selected values
+3. User should be able click Reset View link and it will restore default 
+filter value for Status with All Open Cases value
+4. User should be able to Click and Select dropdown value like On Hold, DDQ 
+Invitation,Qualification,Drafts,Rejected By Investigator, Budget Requested, 
+Budget Submitted,Budget Approved, Budget Rejected, Accepted By 
+investigator,Rejected By investigator and Case Closed and it will give list 
+of cases for selected values.
+5. User should be able click Reset View link and it will restore default 
+filter value for Stage dropdown field with All Open Stages
+6. User should be able click next link and it will go to the next page and 
+this can be validated by seeing the Page count label
+7. User should be able click last link and it will go to the last page and 
+this can be validated by seeing the Page count label
+8. User should be able click prev link and it will return to the previous 
+page and this can be validated by seeing the Page count label
+9. User should be able click first link and it will return to the first 
+page and this can be validated by seeing the Page count label",,
+TPM-T2542,To Verify whether the User able to access List  and access cases under Case List and User able to Cancel SEND INTAKE FORM INVITATION pop up under Invite/Reinvite action item under Case Folder tab,Approved,,"To Verify whether the User able to access List and access cases under Case
+List",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,,,"TPM-11695, TPM-15100",,"1. Click on Case Management Tab
+2. Click on Selected case ( Under Case List)
+3. Click on Invite/Re-invite action items
+4. Click on Go button
+5. Click on Cancel button",Log in to TPM application,"1. User should be able to click the Case Management tab by default Case 
+List tab opens under that user should see Case List Filter label with ? 
+Icon, Reset View link,List coloum sorting fields,Pagination and Case list 
+tables.
+2. User should be able click case and it opens Case Folder subtab and shows 
+case details
+3. User should be able click Invite/Re-invite action item and Intake Form 
+Invitation Menu label pop up opens with close icon having different Intake 
+Forms along with Go button
+4. User able to click on go button and RESEND INTAKE FORM INVITATION popup 
+opens with Send Invitation and Cancel button
+5. User able to click on Cancel button and SEND INTAKE FORM INVITATION 
+popup disappears, lands on Intake Form Invitation Menu label pop up",,
+TPM-T2543,To Verify whether the User able to Upadate|Close without entering field values in Reject/Close action item under Case Folder tab,Approved,,"To Verify whether the User able to Upadate|Close without entering field
+values in Reject/Close action item under Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,,,"TPM-11695, TPM-15101",,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Reject/Close action items
+4. Click on Update|Close button
+5. Click on Close button
+6. Select dropdown value in This partner's status of Reject/Close is based 
+on the following reason field
+7. Click on Attach investigation report or other documents link
+8. Click on Choose File button under Create Attachment
+9. Click on Choose Category field and select nothing
+10. Enter value in Provide a description of the attachment you are 
+uploading field
+11. Click on Upload button
+12. Click on Ok button
+13. Click and Select dropdown value in Choose Category field
+14. Enter nothing in Provide a description of the attachment you are 
+uploading field
+15. Click on Upload button
+16. Click on Ok button
+17. Enter value in Provide a description of the attachment you are 
+uploading field
+18. Click on Upload button
+19. Click on Delete button under Attachments table",Log in to TPM application,"1. Should able to login and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens case details under Case Folder subtab
+3. User should be able click Reject/Close action item and REJECT/CLOSE pop 
+up page opens with Upadate|Close and Cancel button with fields likeThis 
+partner's status of Reject/Close is based on the following reason (Required 
+field), Attach investigation report or other documents link,List of 
+documents attached to this case field and Explanation field.
+4. User should be able click Upadate|Close button without entering any 
+fields and Error pop up appears with Close button along with message You 
+MUST choose a reason to reject this Partner before proceeding.
+5. User able to click on Close button and Error pop up disappears lands 
+back on REJECT/CLOSE pop up
+6. User able to select dropdown value in This partner's status of 
+Reject/Close is based on the following reason field with values 
+97-Closed-No Contract and reject Code 1
+7. User able to click on Attach investigation report or other documents 
+link, Additional Detail Attachments pop up opens with Attachments details, 
+Creat Attachment fields with Upload and Done buttons
+8. User able to click on Choose File button under Create Attachment, Window 
+popup opens to select files and selecting the file name with extension and 
+file size limit 40MB.
+9. User able to click Choose Category field with values Contracts, Email 
+Correspondence,Justification Form, Other, Pictures and Third Party Marking 
+Materials and don't select any values.
+10. User able to enter value in Provide a description of the attachment you 
+are uploading field
+11. User able to click on Upload button, Incomplete Information pop up 
+appears with message Please choose a category of the document you are 
+uploading along with Ok button
+12. User able to click on Ok button, Incomplete Information pop up 
+disappears and lands back on Additional Detail Attachments pop up page
+13. User able to click and select dropdown value in Choose Category field 
+with values Contracts,Email Correspondence, Justification 
+Form,Other,Pictures and Third Party Marking Materials
+14. Enter nothing in Provide a description of the attachment you are 
+uploading field
+15. User able to click on Upload button, Incomplete Information pop up 
+appears with message Please enter a brief description of the document you 
+are uploading along with Ok button
+16. User able to click on Ok button, Incomplete Information pop up 
+disappears and lands back on Additional Detail Attachments pop up page
+17. User able to enter value in Provide a description of the attachment you 
+are uploading field
+18. User able to click on Upload button, file gets upload and it will gets 
+store in Attachments table with Edit attachments and Delete attachments 
+options
+19. User able to click on Delete button and the attached file gets removed 
+from the Attachments table",,
+TPM-T2544,TPM_CM_To Verify whether the User able to reassign without choosing Owner/Requester,Approved,,"To Verify whether the User able to reassign without choosing
+Owner/Requester field in Reassign action item under Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,"P2, Automated-CypressUI",,,"TPM-11695, TPM-15102",,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Reassign action items
+4. Click on Owner/Requester dropdown field choose nothing
+5. Click and select value from Region dropdown field
+6. Click and select value from Department dropdown field
+7. Click and select value from Billing Unit dropdown field
+8. Click on Reassign button
+9. Click on Ok button",Log in to tpm application,"1. Should able to log in and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens case details under Case Folder subtab
+3. User should be able click Reassign action item and Reassign Case 
+Elements pop up page opens with Case Name and Case Number label with fields 
+along with Reassign and Cancel button
+4. User able to click Owner/Requester dropdown field and it will show list 
+of Owner/Requester names and choose nothing
+5. User able to clickand select value from Region dropdown field with 
+values like AI Investigator (DO NOT USE),Antarctica, APAC(Hong Kong), 
+APAC(South),Asia Pacific,EMEA,LATAM,NA and US and Canada
+6. User able to clickand select value from Department dropdown field with 
+values like Adjudication,Consumer Products,Corporate Groups, Human 
+Health,Research and Development,Sales and Sourcing
+7. User able to clickand select value from Billing Unit dropdown field with 
+value like Billing Unit-123
+8. User able to click on Reassign button, Input Errors pop up page aapears 
+with message Case can not be assigned to selected user along with Ok button
+9. User able to click on Ok button, Input Errors pop up page disappears and 
+lands back on Reassign Case Elements pop up page",,
+TPM-T2545,"TPM_CM_To Verify whether the User able to get error messge after clicking Continue|Enter button without entering value in Name This Case field, without selecting value in Type Of Case field, without choosing value in Region field in UPDATE CASE FOLDER and",Approved,,"TPM_CM_To Verify whether the User able to get error messge after clicking 
+Continue|Enter button without entering value in Name This Case field, 
+without selecting value in Type Of Case field, without choosing value in 
+Region field in UPDATE CASE FOLDER and User able to click Go Back|Edit 
+button and User able to get error messge after clicking Continue|Enter 
+button without choosing Address1, City, Country value in DUE DILIGENCE KEY 
+INFO FORM - COMPANY and Verify whether the User able to get error messge 
+after clicking Continue|Enter button without choosing Yes/No radio button 
+value in DUE DILIGENCE KEY INFO FORM - COMPANY",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,,,"TPM-11695, TPM-15103",,"1. Click on Case Management Tab
+2. Click and select Draft value in Stage dropdown field and Click on case
+number under Case List sub tab
+3. Click on Edit action item
+4. Click the ""Name this case"" text field and leave blank
+5. Choose the type from ""type of case"" dropdown
+6. Click the Brief Note/Billing Information adjustable text box
+7. Click ""Region"" dropdown
+8. Click ""Country"" dropdown
+9. Click ""State/Province"" dropdown
+10. Click ""Department"" dropdown
+11. Click ""Billing Unit"" dropdown
+12. Click on Continue|Enter button
+13. Click on Close button
+14. Click the ""Name this case"" text field
+15. Click and Select blank in Choose value in ""type of case"" dropdown
+16. Click on Continue|Enter button
+17. Click on Close button
+18. Choose the type from ""type of case"" dropdown
+19. Click ""Region"" dropdown and select nothing.
+20. Click on Continue|Enter button
+21. Click on Close button
+22. Click ""Region"" dropdown
+23. Click the ""Continue|Enter Details"" button
+24. Click Go Back|Edit button
+25. Click the ""Continue|Enter Deatails"" button
+26. Enter value in Comapany Name Field
+27. Enter value in City Field
+28. Select value in Country drop down field
+29. Enter Nothing in Address1 field.
+30. Click on Continue|Enter Details button
+31. Click on Close button
+32. Enter Value in Address1 Field.
+33. Enter Nothing in city Field
+34. Click on Continue|Enter Details button
+35. Click on Close button
+36. Enter Value in City Field.
+37. Select nothing in Country drop down field
+38. Click on Continue|Enter Details button
+39. Click on Close button
+40. Select value in Country drop down field
+41. Click on Continue|Enter Details button
+42. Click on Continue|Enter Details button",,"1. Should able to log in and access Case Management tab
+2. User should be able Click and select Draft value in Stage dropdown field 
+and case number under Case List sub tab and it opens case details under 
+Case Folder subtab with Edit action item
+3. User should be able click Edit action item and UPDATE CASE FOLDER pop up 
+page opens Continue|Enter Details and Cancel button and Name This Case, 
+Type Of Case,Brief Note/Billing Information, region, Country and Billing 
+Unit are the required fields
+4. User should be able to click Name This Case field and leave blank.
+5. Should be able to select the type from ""Type of case"" dropdown
+6. Should be add the enter the data in the note text box
+7. Should be able to select the region from the region dropdown
+8. Should be able to select the country from the country dropdown
+9. Should be able to select the State/Province from the State/Province 
+dropdown
+10. Should be able to select the Department from the Department dropdown
+11. Should be able to select the Billing Unit from the Billing Unit
+12. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message You must enter a Case Name along with Close button
+13. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+14. Should be able to add/enter the text
+15. User should be able to click and select blank value from ""Type of case"" 
+dropdown
+16. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message You must Choose a Case Typealong with Close button
+17. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+18. Should be able to select the type from ""Type of case"" dropdown
+19. User should be able click value in region dropdown and select nothing.
+20. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message You must Choose a Region along with Close button
+21. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+22. Should be able to select the region from the region dropdown
+23. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province:, dropdowns and Postcode: 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+24. User should able to click Go Back|Edit,DUE DILIGENCE KEY INFO FORM - 
+COMPANY pop up page disappeares and lands back on UPDATE CASE FOLDER pop up 
+page and can edit fields.
+25. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province:, dropdowns and Postcode: 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+26. Should be able to enter value.
+27. Should be able to enter value.
+28. Should be able to select a value in dropdpwn.
+29. should leave the Address1 field blank
+30. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must enter a Street Address for this Subject along with Close button
+31. Should be able to click and error pop will gets disappear
+32. Should be able to enter value.
+33. should leave the City field blank
+34. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must enter a City for this Subject along with Close button
+35. Should be able to click and error pop will gets disappear
+36. Should be able to enter value
+37. Should be able to click on the dropdown and choose nothing.
+38. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must choose a Country. along with Close button
+39. Should be able to click and error pop will gets disappear
+40. Should be able to click and select value from the dropdown
+41. Should Navigate to "" DUE DILIGENCE KEY INFO FORM - COMPANY"" window with
+Information Questionnaire with Go Back|Edit, Continue|Enter Details, Save 
+and Close and Cancel options
+Should be able to see and select the ""Are they aware that they will be 
+investigated? with Yes and No radio buttons
+42. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must mark Yes/No if the Subject is aware they are being investigated. 
+along with Close button",,
+TPM-T2595,To Verify whether the User able to restore default Region list using Reset View link and access Records Per Page dropdown field pagination under Case List tab,Approved,,"To Verify whether the User able to restore default Region list using Reset 
+View link and access Records Per Page dropdown field pagination under Case 
+List tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P3,,,TPM-11695,,"1. Click on Case Management Tab
+2. Click and Select dropdown value in Region field
+3. Click on Reset View link
+4. Click Records Per Page dropdown field
+5. Select value in Records Per Page dropdown field",Log in to TPM Application,"1. User should able to see Reset View link with sorting fields like Case 
+Name with blank field, Status dropdown field with default value Only Open 
+Cases, Stage dropdown field with default value All Open Stages and Region 
+dropdown field with default value Any
+2. User should be able to Click and Select dropdown value like AI 
+Investigator, Antarctica,APAC(Hong Kong),APAC(South),Asia 
+Pecific,EMEA,Latam,NA and US And Canada and it will give list of cases for 
+selected values
+3. User should be able click Reset View link and it will restore default 
+filter value for Region dropdown field with Any
+4. User should be able click Records Per Page dropdown field with default 
+value 15 and can select values 20, 30, 50, 75 and 100
+5. User should be able to select value in Records Per Page dropdown field 
+and it will give selected value records per page, this changes the Page 
+counts and values in JumpTo dropdown field values",,
+TPM-T2596,To Verify whether the User able to close Intake Form Invitation Menu pop up under Invite/Reinvite action item under Case Folder tab,Approved,,"To Verify whether the User able to close Intake Form Invitation Menu pop up
+under Invite/Reinvite action item under Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P3,,,TPM-11695,,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Invite/Re-invite action items
+4. Click on close Icon",Log in to TPM application,"1. Should able to login and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens
+case details under Case Folder subtab
+3. User should be able click Invite/Re-invite action item and Intake Form 
+Invitation Menu label pop up opens with close icon having different Intake 
+Forms along with Go button
+4. User able to click on close icon and Intake Form Invitation Menu label 
+pop
+up disappears and lands on the Case Folder subtab",,
+TPM-T2597,"To Verify whether the User able to cancel REJECT/CLOSE pop up, upload file without Choosing the file, Edit the uploaded file in Reject/Close action item under Case Folder tab",Approved,,"To Verify whether the User able to cancel REJECT/CLOSE pop up, upload file 
+without Choosing the file, Edit the uploaded file in Reject/Close action 
+item under Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P3,,,TPM-11695,,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Reject/Close action items
+4. Click on Cancel button
+5. Click on Reject/Close action items
+6. Select dropdown value in This partner's status of Reject/Close is based 
+on the following reason field
+7. Click on Attach investigation report or other documents link
+8. Click on Choose File button under Create Attachment and upload nothing.
+9. Click and Select dropdown value in Choose Category field
+10. Enter value in Provide a description of the attachment you are 
+uploading field
+11. Click on Upload button
+12. Click on Ok button
+13. Click on Choose File button under Create Attachment
+14. Click Upload button
+15. Click on Edit button under Attachments table",,"1. Should able to login and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens
+case details under Case Folder subtab
+3. User should be able click Reject/Close action item and REJECT/CLOSE pop 
+up
+page opens with Upadate|Close and Cancel button with fields like This 
+partner's status of Reject/Close is based on the following reason (Required 
+field), Attach investigation report or other documents link,List of 
+documents attached to this case field and Explanation field
+4. User should be able click Cancel button and REJECT/CLOSE pop up page
+disappears lands back on the Case List sub tab
+5. User should be able click Reject/Close action item and REJECT/CLOSE pop 
+up
+page opens with Upadate|Close and Cancel button
+6. User able to select dropdown value in This partner's status of 
+Reject/Close is based on the following reason field with values 
+97-Closed-No Contract and reject Code 1
+7. User able to click on Attach investigation report or other documents 
+link, Additional Detail Attachments pop up opens with Attachments details, 
+Create Attachment fields with Upload and Done buttons
+8. User able to click on Choose File button under Create Attachment, Window 
+popup opens to select files and dont select any file
+9. User able to click and select dropdown value in Choose Category field 
+with values Contracts,Email Correspondence,Justification 
+Form,Other,Pictures and Third Party Marking Materials
+10. User able to enter value in Provide a description of the attachment you 
+are uploading field
+11. User able to click on Upload button, Incomplete Information pop up 
+appears with message Please select a file to upload along with Ok button
+12. User able to click on Ok button, Incomplete Information pop up 
+disappears and lands back on Additional Detail Attachments pop up page
+13. User able to click on Choose File button under Create Attachment, 
+Window popup opens to select files and after selecting the file, file name 
+will show up next to Choose File button and file size limit 40MB.
+14. User able to click on Upload button, file gets upload and it will gets
+store in Attachments table with Edit attachments and Delete attachments 
+options
+15. User able to click on Edit button and we can edit details like Category 
+and description",,
+TPM-T2598,TPM_CM_To Verify whether the User able to Cancel reassign pop up in Re-assign action item,Approved,,"To Verify whether the User able to Cancel reassign pop up in Reassign
+action item under Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P3,,,TPM-11695,,"1. Click on Case Management Tab
+2. Select and Click on case number under Case List sub tab
+3. Click on Reassign action items
+4. Click and select Owner/Requester dropdown field
+5. Click and select value from Region dropdown field
+6. Click and select value from Department dropdown field
+7. Click and select value from Billing Unit dropdown field
+8. Click on Cancel button",,"1. Should able to log in TPM application and access Case Management tab
+2. User should be able click case number under Case List sub tab and it 
+opens
+case details under Case Folder subtab
+3. User should be able click Reassign action item and Reassign Case 
+Elements
+pop up page opens with Case Name and Case Number label with fields along
+with Reassign and Cancel button
+4. User able to click Owner/Requester dropdown field and it will show list 
+of Owner/Requester names and select value from the list
+5. User able to clickand select value from Region dropdown field with 
+values
+like AI Investigator (DO NOT USE),Antarctica,APAC(Hong Kong), APAC(South), 
+Asia Pacific, EMEA, LATAM, NA and US and Canada
+6. User able to clickand select value from Department dropdown field with
+values like Adjudication,Consumer Products,Corporate Groups,Human Health, 
+Research and Development,Sales and Sourcing
+7. User able to clickand select value from Billing Unit dropdown field with 
+value like Billing Unit-123
+8. User able to click on Cancel button, Reassign Case Elements pop up page 
+disaapears and assigned name will remain same in the requester column in 
+the case list",,
+TPM-T2599,"TPM_CM_To Verify whether the User able to get error messge after clicking Continue|Enter button, User able to Cancel UPDATE CASE FOLDER pop up in Edit action item, User able to get error messge after clicking Continue|Enter button without choosing Company",Approved,,"To Verify whether the User able to get error messge after clicking 
+Continue|Enter button, User able to Cancel UPDATE CASE FOLDER pop up in 
+Edit action item, User able to get error messge after clicking 
+Continue|Enter button without choosing Company Name value in DUE DILIGENCE 
+KEY INFO FORM - COMPANY, User able to access Canel button in EDIT | ADD 
+PRINCIPALS, User able to click Cancel button in DUE DILIGENCE KEY INFO FORM 
+- COMPANY.",/TPM_Automation (CoE)/CaseManagement,Normal,,P3,,,TPM-11695,,"1. Click on Case Management Tab
+2. Click and select Draft value in Stage dropdown field and Click on case
+number under Case List sub tab
+3. Click on Edit action item
+4. Click the ""Name this case"" text field
+5. Choose the type from ""type of case"" dropdown
+6. Click the Brief Note/Billing Information adjustable text box
+7. Click ""Region"" dropdown and choose nothing
+8. Click ""Country"" dropdown
+9. Click ""State/Province"" dropdown
+10. Click ""Department"" dropdown
+11. Click ""Billing Unit"" dropdown
+12. Click on Continue|Enter button
+13. Click Close Button
+14. Click ""Region"" dropdown
+15. Click on Cancel Button
+16. Click on Edit action item
+17. Click the ""Continue|Enter Details"" button
+18. Leave Company name blank.
+19. Enter value in Adderss 1 Field
+20. Enter value in City Field
+21. Select value in Country drop down field
+22. Click on Continue|Enter Details button
+23. Click on close button
+24. Click on Add|Edit button
+25. Click on Cancel button
+26. Click on Cancel button
+27. Click on Attachment tab
+28. Click on Add New button
+29. Click on Choose File button
+30. Click and Select value in Choose Catagory dropdown field
+31. Enter value in Provide a description of the document you are uploading
+field
+32. Click on Close button",Log in to TPM application,"1. Should able to log in TPM application and access Case Management tab
+2. User should be able Click and select Draft value in Stage dropdown field
+and case number under Case List sub tab and it opens case details under
+Case Folder subtab with Edit action item
+3. User should be able click Edit action item and UPDATE CASE FOLDER pop up 
+page opens Continue|Enter Details and Cancel button and Name This Case, 
+Type Of Case,Brief Note/Billing Information, region, Country and Billing 
+Unit are the required fields
+4. Should be able to add/enter the text
+5. Should be able to select the type from ""Type of case"" dropdown
+6. Should be add the enter the data in the note text box
+7. Should leave the region blank.
+8. Should be able to select the country from the country dropdown
+9. Should be able to select the State/Province from the State/Province
+dropdown
+10. Should be able to select the Department from the Department dropdown
+11. Should be able to select the Billing Unit from the Billing Unit
+12. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message You must Choose a Region along with Close button
+13. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+14.Should be able to select the region from the region dropdown
+15. User should be able to click on Cancel button and UPDATE CASE FOLDER 
+pop up page closes and lands back on the Case Folder subtab page
+16. User should be able click Edit action item and UPDATE CASE FOLDER pop 
+up page opens Continue|Enter Details and Cancel button and Name This Case, 
+Type Of Case,Brief Note/Billing Information, region, Country and Billing 
+Unit are the required fields
+17. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province:, dropdowns and Postcode 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+18. should leave the company name blank
+19. Should be able to enter value.
+20. Should be able to enter value.
+21. Should be able to select value from dropdown.
+22. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below..
+You must enter a Subject Name for this investigation. along with Close 
+button
+23. Should be able to click and error pop will gets disappear
+24. Should be able to click and EDIT | ADD PRINCIPALS pop up page appears 
+with Principle, Relationship/Title,multiple Owner checkboxes and +Add Three 
+more Principles button along with Update and Cancel button
+25. Should able to click,EDIT | ADD PRINCIPALS pop up page disappears and 
+lands back on DUE DILIGENCE KEY INFO FORM - COMPANY pop up page
+26. User should able to click Cancel and DUE DILIGENCE KEY INFO FORM 
+-COMPANY pop up gets closed ,the entered fields not get saved in case 
+management list.
+27. User should able to click and it will give the list of attachments for 
+that
+perticular case in a table formate along with Add New button
+28. User should be able to click it and a window with chhose file button, 
+choose category dropdown and provide description field along with upload 
+and close buttons will appear.
+29. User should be able to select any file of size upto 40MB
+30. User should able to click and select the value
+31. User should able to click and select the value
+32. User should able to click and and the selected file will not uploaded 
+and
+lands back on the default page under Attachment tab",,
+TPM-T3470,"TPM_CM_To Verify whether the User able to get error messge after clicking Continue|Enter button without entering value in Name This Case field, without selecting value in Type Of Case field, without choosing value in Region field in UPDATE CASE FOLDER and",Approved,,"TPM_CM_To Verify whether the User able to get error messge after clicking 
+Continue|Enter button without entering value in Name This Case field, 
+without selecting value in Type Of Case field, without choosing value in 
+Region field in UPDATE CASE FOLDER and User able to click Go Back|Edit 
+button and User able to get error messge after clicking Continue|Enter 
+button without choosing Address1, City, Country value in DUE DILIGENCE KEY 
+INFO FORM - COMPANY and Verify whether the User able to get error messge 
+after clicking Continue|Enter button without choosing Yes/No radio button 
+value in DUE DILIGENCE KEY INFO FORM - COMPANY",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,,,TPM-11695,,"1. Click on Case Management Tab
+2. Click and select Draft value in Stage dropdown field and Click on case
+number under Case List sub tab
+3. Click on Edit action item
+4. Click the ""Name this case"" text field and leave blank
+5. Choose the type from ""type of case"" dropdown
+6. Click the Brief Note/Billing Information adjustable text box
+7. Click ""Region"" dropdown
+8. Click ""Country"" dropdown
+9. Click ""State/Province"" dropdown
+10. Click ""Department"" dropdown
+11. Click ""Billing Unit"" dropdown
+12. Click on Continue|Enter button
+13. Click on Close button
+14. Click the ""Name this case"" text field
+15. Click and Select blank in Choose value in ""type of case"" dropdown
+16. Click on Continue|Enter button
+17. Click on Close button
+18. Choose the type from ""type of case"" dropdown
+19. Click ""Region"" dropdown and select nothing.
+20. Click on Continue|Enter button
+21. Click on Close button
+22. Click ""Region"" dropdown
+23. Click the ""Continue|Enter Details"" button
+24. Click Go Back|Edit button
+25. Click the ""Continue|Enter Deatails"" button
+26. Enter value in Comapany Name Field
+27. Enter value in City Field
+28. Select value in Country drop down field
+29. Enter Nothing in Address1 field.
+30. Click on Continue|Enter Details button
+31. Click on Close button
+32. Enter Value in Address1 Field.
+33. Enter Nothing in city Field
+34. Click on Continue|Enter Details button
+35. Click on Close button
+36. Enter Value in City Field.
+37. Select nothing in Country drop down field
+38. Click on Continue|Enter Details button
+39. Click on Close button
+40. Select value in Country drop down field
+41. Click on Continue|Enter Details button
+42. Click on Continue|Enter Details button",,"1. Should able to log in and access Case Management tab
+2. User should be able Click and select Draft value in Stage dropdown field 
+and case number under Case List sub tab and it opens case details under 
+Case Folder subtab with Edit action item
+3. User should be able click Edit action item and UPDATE CASE FOLDER pop up 
+page opens Continue|Enter Details and Cancel button and Name This Case, 
+Type Of Case,Brief Note/Billing Information, region, Country and Billing 
+Unit are the required fields
+4. User should be able to click Name This Case field and leave blank.
+5. Should be able to select the type from ""Type of case"" dropdown
+6. Should be add the enter the data in the note text box
+7. Should be able to select the region from the region dropdown
+8. Should be able to select the country from the country dropdown
+9. Should be able to select the State/Province from the State/Province 
+dropdown
+10. Should be able to select the Department from the Department dropdown
+11. Should be able to select the Billing Unit from the Billing Unit
+12. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message You must enter a Case Name along with Close button
+13. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+14. Should be able to add/enter the text
+15. User should be able to click and select blank value from ""Type of case"" 
+dropdown
+16. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message You must Choose a Case Typealong with Close button
+17. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+18. Should be able to select the type from ""Type of case"" dropdown
+19. User should be able click value in region dropdown and select nothing.
+20. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message You must Choose a Region along with Close button
+21. User should be able to click Close button and Error pop up page 
+disappears, lands back on UPDATE CASE FOLDER pop up page
+22. Should be able to select the region from the region dropdown
+23. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province:, dropdowns and Postcode: 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+24. User should able to click Go Back|Edit,DUE DILIGENCE KEY INFO FORM - 
+COMPANY pop up page disappeares and lands back on UPDATE CASE FOLDER pop up 
+page and can edit fields.
+25. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY"" 
+window which has Type with Prospective and Current radio buttons, 
+Relationship type dropdown, Legal Form of Company dropdown, Company 
+identity with: Company Name:, Alternate Trade Name(s), Address 1:, Address 
+2:, City:, text boxes and Country, State/Province:, dropdowns and Postcode: 
+text box, ""Principals"" with Add/Edit option with ""Go Back|Edit"", 
+Continue|Enter Details, Save and Close and Cancel option buttons
+26. Should be able to enter value.
+27. Should be able to enter value.
+28. Should be able to select a value in dropdpwn.
+29. should leave the Address1 field blank
+30. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must enter a Street Address for this Subject along with Close button
+31. Should be able to click and error pop will gets disappear
+32. Should be able to enter value.
+33. should leave the City field blank
+34. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must enter a City for this Subject along with Close button
+35. Should be able to click and error pop will gets disappear
+36. Should be able to enter value
+37. Should be able to click on the dropdown and choose nothing.
+38. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must choose a Country. along with Close button
+39. Should be able to click and error pop will gets disappear
+40. Should be able to click and select value from the dropdown
+41. Should Navigate to "" DUE DILIGENCE KEY INFO FORM - COMPANY"" window with
+Information Questionnaire with Go Back|Edit, Continue|Enter Details, Save 
+and Close and Cancel options
+Should be able to see and select the ""Are they aware that they will be 
+investigated? with Yes and No radio buttons
+42. User should be able to click on Continue|Enter button and Error pop up 
+page opens with message The following errors have occurred.Please correct 
+the following errors listed below.
+You must mark Yes/No if the Subject is aware they are being investigated. 
+along with Close button",,
+TPM-T3648,Verify Link CLICK HERE or Action icon with + under Add Case window ,Draft,,"Verify Link CLICK HERE or Action icon with + under Add Case window
+
+",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,712020:53b5d4f3-46a6-4a96-948c-d95baefc4e3f,,TPM-15941,,"Mouse hover over the ADD CASE+ action icon
+Click on the ADD CASE+ icon
+Click the Action icon + or CLICK HERE Link
+Should open a Add/Select the third party profile pop window to associate a 
+3P profile for a case with Continue|Enter Details and Cancel
+Click the Type of Profile
+Click the Category
+Click and Enter the Official Company Name
+Click the company name from the below matching records
+Click No
+Click Yes",,"Should display the text message as ""NEW CASE FOLDER""
+Should open a NEW CASE FOLDER pop window
+Should open a Add/Select the third party profile pop window to associate a 
+3P profile for a case with Continue|Enter Details and Cancel
+Should be able to add the by choosing from the Type of Profile dropdown
+Should be able to add the by choosing from the Category dropdown
+Should be able to add the company name and should see the matching profile 
+in the below ""
+Possible existing matches"" matching record window if available
+Should be able to see the ""About to Link Company Profile to Case"" pop up 
+window with Yes and No options
+Should navigate back to Add/Select the Thrid Party Profile window
+Should navigate back to CREATE NEW CASE FOLDER window with profile details 
+added to it",,
+TPM-T3659,To Verify whether the User able to access List  and access cases under Case List,Draft,,"To Verify whether the User able to access List  and access cases under Case 
+List",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,712020:53b5d4f3-46a6-4a96-948c-d95baefc4e3f,,TPM-15952,,"Click on Case Management Tab
+Click on Selected case ( Under Case List)",,"Should be able to navigate to Case Management Tab
+User should be able click case and it opens Case Folder subtab and shows 
+case details",,
+TPM-T3660,Verify whether the User able to delete uploaded file in Attach investigation report or other documents in Reject/Close action item under Case Folder tab,Draft,,"To Verify whether the User able to delete uploaded file in Attach 
+investigation report or other documents in Reject/Close action item under 
+Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,712020:53b5d4f3-46a6-4a96-948c-d95baefc4e3f,,TPM-15954,,"   1. Click on Case Management Tab
+   2. Select and Click on case number under Case List sub tab
+   3. Click on Reject/Close action items
+   4. Select dropdown value in This partner's status of Reject/Close is
+      based on the following reason field
+   5. Click on Attach investigation report or other documents link
+   6. Click on Choose File button under Create Attachment
+   7. Click and Select dropdown value in Choose Category field
+   8. Enter value in Provide a description of the attachment you are
+      uploading field
+   9. Click on Upload button
+  10. Click on Delete button under Attachments table",,"   1. Should able to login and access Case Management tab
+   2. User should be able click case number under Case List sub tab and it
+      opens case details under Case Folder subtab
+   3. User should be able click Reject/Close action item and REJECT/CLOSE
+      pop up page opens with Upadate|Close and Cancel button
+   4. User able to select dropdown value in This partner's status of
+      Reject/Close is based on the following reason field with values
+      97-Closed-No Contract and reject Code 1
+   5. User able to click on Attach investigation report or other documents
+      link, Additional Detail Attachments pop up opens with Attachments
+      details, Creat Attachment fields with Upload and Done buttons
+   6. User able to click on Choose File button under Create Attachment,
+      Window popup opens to select files and after selecting the file, file
+      name will show up next to Choose File button and file size limit
+      40MB.
+   7. User able to click and select dropdown value in Choose Category field
+      with values Contracts,Email Correspondence,Justification
+      Form,Other,Pictures and Third Party Marking Materials
+   8. User able to enter value in Provide a description of the attachment
+      you are uploading field
+   9. User able to click on Upload button, file gets upload and it will
+      gets store in Attachments table with Edit attachments and Delete
+      attachments options
+  10. User able to click on Delete button and the attached file gets
+      removed from the Attachments table",,
+TPM-T3661,TPM_CM_To Verify whether the User able to get error messge after clicking Continue|Enter button without choosing Yes/No radio button and able to click on Go Back|Edit button,Draft,,"To Verify whether the User able to click Go Back|Edit button in DUE 
+DILIGENCE KEY INFO FORM - COMPANY pop up page in Edit action item under 
+Case Folder tab
+To Verify whether the User able to get error messge after clicking 
+Continue|Enter button without choosing Yes/No radio button value in DUE 
+DILIGENCE KEY INFO FORM - COMPANY pop up page in Edit action item under 
+Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,712020:53b5d4f3-46a6-4a96-948c-d95baefc4e3f,,TPM-15955,,"   1. Click on Case Management Tab
+   2. Click and select Draft value in Stage dropdown field and Click on
+      case number under Case List sub tab
+   3. Click on Edit action item
+   4. Click the ""Name this case"" text field
+   5. Choose the type from ""type of case"" dropdown
+   6. Click the Brief Note/Billing Information adjustable text box
+   7. Click ""Region"" dropdown
+   8. Click ""Country"" dropdown
+   9. Click ""State/Province"" dropdown
+  10. Click ""Department"" dropdown
+  11. Click ""Billing Unit"" dropdown
+  12. Click the ""Continue|Enter Details"" button
+  13. Click Go Back|Edit button
+  14. Click the ""Continue|Enter Details"" button
+  15. Enter value in Comapany Name Field
+  16. Enter value in Address1 Field
+  17. Enter value in City field
+  18. Select value in Country drop down field
+  19. Click on Continue|Enter Details button
+  20. Click on close button",,"   1. Should log in to TPM application and Access Case Management tab
+   2. User should be able Click and select Draft value in Stage dropdown
+      field and case number under Case List sub tab and it opens case
+      details under Case Folder subtab with Edit action item
+   3. User should be able click Edit action item and UPDATE CASE FOLDER pop
+      up page opens Continue|Enter Details and Cancel button and Name This
+      Case,Type Of Case,Brief Note/Billing Information, region, Country and
+      Billing Unit are the required fields
+   4. Should be able to add/enter the text
+   5. Should be able to select the type from ""Type of case"" dropdown
+   6. Should be add the enter the data in the note text box
+   7. Should be able to select the region from the region dropdown
+   8. Should be able to select the country from the country dropdown
+   9. Should be able to select the State/Province from the State/Province
+      dropdown
+  10. Should be able to select the Department from the Department dropdown
+  11. Should be able to select the Billing Unit from the Billing Unit
+  12. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY""
+      window which has Type with Prospective and Current radio buttons,
+      Relationship type dropdown, Legal Form of Company dropdown, Company
+      identity with: Company Name:, Alternate Trade Name(s), Address 1:,
+      Address 2:, City:, text boxes and Country, State/Province:, dropdowns
+      and Postcode: text box, ""Principals"" with Add/Edit option with ""Go
+      Back|Edit"", Continue|Enter Details, Save and Close and Cancel option
+      buttons
+  13. User should able to click Go Back|Edit,DUE DILIGENCE KEY INFO FORM -
+      COMPANY pop up page disappeares and lands back on UPDATE CASE FOLDER
+      pop up page and can edit fields.
+  14. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY""
+      window which has Type with Prospective and Current radio buttons,
+      Relationship type dropdown, Legal Form of Company dropdown, Company
+      identity with: Company Name:, Alternate Trade Name(s), Address 1:,
+      Address 2:, City:, text boxes and Country, State/Province:, dropdowns
+      and Postcode: text box, ""Principals"" with Add/Edit option with ""Go
+      Back|Edit"", Continue|Enter Details, Save and Close and Cancel option
+      buttons
+  15. Should be able to enter value.
+  16. Should be able to enter value.
+  17. Should be able to enter value
+  18. Should be able to select value in dropdown
+  19. User should be able to click on Continue|Enter button and Error pop
+      up page opens with message The following errors have occurred.Please
+      correct the following errors listed below.
+      1. You must tell us if you want the Field Investigation performed on
+      the Principals.
+      along with Close button
+  20. Should be able to click and error pop will gets disappear",,
+TPM-T3669,TPM_TC_ADD_CASE_Verify the Save and Close in ADD Case under profile,Draft,,Verify the Save and Close in ADD Case under profile,/TPM_Automation (CoE)/CaseManagement,Normal,,P2,712020:53b5d4f3-46a6-4a96-948c-d95baefc4e3f,,TPM-15961,,Mouse hover over the ADD CASE+ action icon,,"Should display the text message as ""NEW CASE FOLDER""",,
+,,,,,,,,,,,,,Click on the ADD CASE+ icon,,"Should display the pop window NEW CASE FOLDER with +CLICK HERE link, ""Name 
+this Case"" text box, ""Type of Case"" dropdown, ""Brief Note/
+Billing Information:"" text box, Region:, Country:, State/Province:, 
+Department:, Billing Unit:, with ""Create Case|Enter Company Details"" and 
+Cancel buttons",,
+,,,,,,,,,,,,,Click and enter all details in the fields,,Should be able to add the details in the fields,,
+,,,,,,,,,,,,,Click the Continue|Enter Details,,"Should be able to navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY""",,
+,,,,,,,,,,,,,Click Save and Close,,Should be able to save the details go back to case folder,,
+,,,,,,,,,,,,,Open the case folder,,Should be able to see the details entered are saved,,
+TPM-T4691,Verify error on completing investigation with missing report,Approved,Case in 'Accepted by Investigator' stage; Investigator logged in,"Verify that completing the investigation without uploading a report is not 
+allowed",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,,,,,,,,,
+TPM-T4693,Verify notification not sent if email server is down,Approved,"Any case stage transition that triggers notification; Email server is 
+offline","Verify that if notification cannot be sent due to email server error, the 
+user is informed and the case stage is not updated",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,,,,,,,,,

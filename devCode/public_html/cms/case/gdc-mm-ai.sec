@@ -1,0 +1,2886 @@
+<?php
+/**
+ * SP GDC Review interface
+ */
+
+require_once __DIR__ . '/../includes/php/cms_defs.php';
+$session->cms_logged_in(true, -1);
+$gdcReviewAuth = PageAuth::genToken('gdcReviewAuth');
+require_once __DIR__ . '/../includes/php/class_access.php';
+$accCls = UserAccess::getInstance();
+
+if (!$session->value('IN_CASE_HOME')
+    || $session->secure_value('userClass') != 'vendor'
+    || !isset($_SESSION['currentCaseID'])
+    || !($caseID = $_SESSION['currentCaseID'])
+    || !$accCls->allow('accCaseMng')
+) {
+    return;
+}
+require_once __DIR__ . '/../includes/php/Models/Globals/Features/TenantFeatures.php';
+require_once __DIR__ . '/../includes/php/class_gdccase.php';
+require_once __DIR__ . '/../includes/php/Models/Globals/Geography.php';
+$loadScreening = '';
+
+if (isset($_GET['ls'])) {
+    // load specific screening, rather than current
+    $loadScreening = '?scrID=' . intval($_GET['ls']);
+}
+$e_clientID = $clientID = $_SESSION['clientID'];
+$gdc = new Gdc($clientID);
+$flags      = $gdc->flagImage;
+$imgMatch    = $flags['match'];
+$imgFalsePositive = $flags['falsePositive'];
+$imgUndetermined  = $flags['undetermined'];
+$caseInfoBtmMarg = 7;
+$e_caseID = intval($caseID);
+
+// Is Media Monitor enabled for the given case's tenant?
+$mmEnabled = (($tf = (new TenantFeatures($clientID))->tenantHasFeatures([Feature::TENANT_MEDIA_MONITOR], FEATURE::APP_TPM)) && !empty($tf[Feature::TENANT_MEDIA_MONITOR]));
+
+include_once __DIR__ . '/../includes/php/class_waitspin.php';
+$waitSpinJS = WaitSpin::headJs(16, ['waitspinCfgTabDiv', 'waitspinRefinementDiv']);
+
+$insertInHead =<<<EOT
+
+<style type="text/css">
+
+#ifrbody {
+  margin-bottom: 2px;
+}
+
+#subdemo .yui-content {
+  background-color: #fff;
+  border: none;
+  margin: .7em 0 0 0;
+  padding: 0;
+}
+
+.acld-title {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: .25em;
+}
+
+.acld-text {
+  font-weight: normal
+}
+
+.acld-label {
+  font-weight:bold;
+  text-decoration: italic;
+}
+
+#hit-list, #review-symbols {
+    margin-left: 20px;
+}
+
+#subject-list, #subject-list-nr {
+    width: 100%;
+}
+
+#gdc-review-log div.bd {
+    background-color: #ffffff;
+}
+
+
+#subject-list tr.hi {
+    background-color: #88cefa;
+}
+
+#hit-list table tr.clk {
+    cursor: pointer;
+}
+
+#hit-list table tr:hover.clk {
+    background-color: #abdfff;
+}
+
+#pgdiv0, #pgdiv1, #pgdiv2, #pgdiv3, #pgdiv4 {
+    width: 830px;
+    height: 450px;
+    overflow: auto;
+}
+
+#basis-summary ul {
+    margin-left: -15px;
+
+}
+
+#gdc-record-eval tbody tr td input {
+    margin-right: 0;
+}
+
+#gdc-record-eval tbody tr td {
+    text-align: center;
+    width: 30px;
+}
+
+#gdc-rec-tbl tr th {
+    font-weight: bold;
+    text-align: center;
+    background-color: #dcdcdc;
+    color: #000000;
+}
+#gdc-rec-tbl tr td.fld {
+    color: #000000;
+    background-color: #ececec;
+}
+#gdc-rec-tbl tr td.data {
+    color: #000000;
+    background-color: #f9f9f9;
+}
+#gdc-rec-tbl tr td.diff {
+    background-color: #ffffcb
+}
+#gdc-rec-tbl td.ICIJAttribution {
+    border: 1px solid lightgrey;
+}
+
+#gdc-reasons-container, #gdc-reasons-container-bulk {
+    display: none;
+}
+
+#gdc-reason-dropdown {
+    max-width: 200px;
+    margin-top: 4px;
+}
+
+
+#gdc-note-bulk {
+    width: 400px;
+    margin: 10px 0 0 0;
+    padding: 5px;
+    border: 1px solid #bababa;
+    webkit-border-radius: 4px;
+    moz-border-radius: 4px;
+    border-radius: 4px;
+}
+
+div.surround-indent {
+    border: 1px solid #cccccc;
+    margin-left: 2.5em;
+    padding: 10px;
+}
+em.plain, em.note {
+    margin-left: 1.2em;
+    font-weight: normal;
+    font-style: normal;
+}
+em.note {
+    font-style: italic;
+}
+#gdc-case-info {
+    margin-bottom: {$caseInfoBtmMarg}px;
+}
+#gdc-case-info span {
+    display: inline-block;
+    margin: 0 5px 0 10px;
+    text-align: center;
+    font-weight: bold;
+}
+#gdc-case-info span img {
+    padding-bottom: 4px;
+}
+
+/* Media Monitor specific styles */
+.gdc-mm-list {
+    list-style-type: none;
+    padding-left: 0;
+}
+.gdc-li-tpl div {
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+.gdc-li-tpl div:hover {
+    background-color: #abdfff;
+    cursor: pointer;
+.}
+
+.gdc-mm-res-new {
+    display: table-cell;
+    width: 15px;
+}
+
+.gdc-mm-res-ttl,
+.gdc-mm-res-pct {
+    display: table-cell;
+    padding-right: 10px;
+}
+
+.gdc-mm-res-ttl:hover,
+.gdc-mm-res-pct:hover {
+    color: #ff9900;
+}
+
+.gdc-mm-res-url {
+    display: table-cell;
+    max-width: 255px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#gdc-mm-results-heading {
+   text-decoration: underline;
+   font-weight: bold;
+   text-transform: capitalize;
+   font-size: 12px;
+}
+</style>
+
+$waitSpinJS
+
+EOT;
+
+$loadYUImodules = array('cmsutil', 'button', 'tabview', 'dispatcher', 'json', 'inlinehelp', 'paginator', 'datatable');
+$pageTitle = "Review Global Database Check";
+//noShellHead(true);
+
+$globaldb = GLOBAL_DB;
+$isodb = ISO_DB;
+$spID = $_SESSION['vendorID'];
+$spdb = GLOBAL_SP_DB;
+
+$caseRec = $dbCls->fetchObjectRow("SELECT caseName, caseState, caseCountry, userCaseNum "
+    . "FROM cases WHERE id = '$e_caseID' AND clientID = '$e_clientID' LIMIT 1"
+);
+
+$e_caseCountry = preg_replace("/[^A-Z2]/", "", $caseRec->caseCountry);
+
+$geo = \Legacy\Models\Globals\Geography::getVersionInstance();
+$caseCountry = $geo->getLegacyCountryName($e_caseCountry);
+
+$caseFolderImage = '<span class="fas fa-folder" style="font-size: 50px;"></span>';
+$caseSummaryInfo = <<< EOT
+<table cellpadding="2" cellspacing="0">
+<tr>
+    <td><div class="fw-bold marg-rtsm">{$caseRec->userCaseNum}:</div></td>
+    <td class="fw-bold">$caseRec->caseName</td>
+</tr>
+<tr>
+    <td>State:</td>
+    <td>$caseRec->caseState</td>
+</tr>
+<tr>
+    <td>Country:</td>
+    <td>$caseCountry</td>
+</tr>
+</table>
+EOT;
+
+$gc = new GdcCase($caseID, $clientID);
+$cfg = $gc->getCfg();
+$staticNames = $gc->getStaticNames();
+
+// clean up names for direct JSON string assignment. Entered through unsanitized bulk upload?
+$srch = array('"', "'", "\r\n", "\r", "\n", "\t");
+$rplc = array('', '&#039;', ' ', ' ', ' ', ' ');
+$aLimit = count($cfg);
+for ($i = 0; $i < $aLimit; $i++) {
+    $cfg[$i] = str_replace($srch, $rplc, $cfg[$i]);
+}
+$staticNames['caseName'] = str_replace($srch, $rplc, $staticNames['caseName']);
+$staticNames['siName'] = str_replace($srch, $rplc, $staticNames['siName']);
+$aLimit = count($staticNames['siPrincipal']);
+for ($i = 0; $i < $aLimit; $i++) {
+    $staticNames['siPrincipal'][$i] = str_replace($srch, $rplc, $staticNames['siPrincipal'][$i]);
+}
+
+$dupIdent = ($staticNames['caseName'] == $staticNames['siName']);
+$usedCaseName = false;
+$usedSubjectName = false;
+$trackPrin = array();
+foreach ($staticNames['siPrincipal'] as $prin) {
+    $trackPrin[$prin] = 0;
+}
+$tmp = array();
+foreach ($cfg as $c) {
+    $parts = explode('|', $c);
+    $cnt = count($parts);
+    $eType = $parts[0];
+    $basis = $parts[1];
+    $src   = $parts[2];
+    $isPrin = false;
+    $a = array(
+        'incl' => 1,
+        'eType' => $eType,
+        'basis' => $basis,
+        'src' => $src,
+    );
+    switch ($src) {
+    case 'caseName':
+        $usedCaseName = true;
+        break;
+    case 'siName':
+        $usedSubjectName = true;
+        break;
+    case 'siPrincipal':
+        $isPrin = true;
+        break;
+    default:
+        $src = 'other';
+    }
+    if ($cnt == 5) {
+        $a['first'] = $first = $parts[3];
+        $a['last'] = $last = $parts[4];
+        $full = trim("$first $last");
+    } elseif ($cnt == 4) {
+        $a['name'] = $full = $parts[3];
+    }
+    $tmp[] = $a;
+    if ($isPrin && in_array($full, $trackPrin)) {
+        $trackPrin[$full] = 1;
+    }
+}
+if (!$dupIdent) {
+    if (!$usedCaseName && $staticNames['caseName']) {
+        $tmp[] = array(
+            'incl' => 0,
+            'eType' => 'E',
+            'basis' => 'full',
+            'src' => 'caseName',
+            'name' => $staticNames['caseName'],
+        );
+    }
+}
+if (!$usedSubjectName && $staticNames['siName']) {
+    $tmp[] = array(
+        'incl' => 0,
+        'eType' => 'E',
+        'basis' => 'full',
+        'src' => 'siName',
+        'name' => $staticNames['siName'],
+    );
+}
+// Append unused principals to list
+foreach ($trackPrin AS $prin => $incl) {
+    if ($incl) {
+        continue;
+    }
+    $first = $last = $full = '';
+    $isCompany = false;
+    $parsedName = guessNameParts($prin, $first, $last, $full, $isCompany);
+    // HB on 2014-04-22:
+    // Trigger has served its purpose, disabled until further notice.
+    /*if (!($parsedName = guessNameParts($prin, $first, $last, $full, $isCompany))
+        && (trim($full) != "")
+    ) {
+        nameParseException($clientID,__FILE__,__LINE__,$prin);
+    }*/
+    if ($first && $last) {
+        $tmp[] = array(
+            'incl' => 0,
+            'eType' => 'P',
+            'basis' => 'fila',
+            'src' => 'siPrincipal',
+            'first' => $first,
+            'last' => $last,
+        );
+    } elseif ($full) {
+        $tmp[] = array(
+            'incl' => 0,
+            'eType' => 'P',
+            'basis' => 'full',
+            'src' => 'siPrincipal',
+            'name' => $prin,
+        );
+    }
+}
+$curConfig = json_encode($tmp);
+
+$bulkAdjudEnabled = true; // Available by default
+$aiSummarisationEnabled = ($accCls->ftr->has(Feature::AI_SUMMARISATION) && filter_var(getenv("AI_SUMMARY_ENABLED"), FILTER_VALIDATE_BOOLEAN));
+
+function escJsText($txt)
+{
+    return str_replace("\n", '\n', cleanMmTemplate($txt));
+}
+
+function cleanMmTemplate($txt)
+{
+    return str_replace('"', '\"', mediaMonSlashes($txt));
+}
+
+function mediaMonSlashes($txt)
+{
+    return addcslashes(str_replace("\r", '', (string)$txt), "\0..\37'\\");
+}
+
+?>
+
+<script type="text/javascript">
+YAHOO.namespace('gdcdata');
+gdcdata = YAHOO.gdcdata; <?php // external reference ?>
+gdcdata.opActive = false;
+gdcdata.auth = '<?php echo $gdcReviewAuth; ?>';
+gdcdata.loadedDesc = [];
+gdcdata.redirectToReviewTab = false;
+gdcdata.currentResultsVal = null;
+gdcdata.currentIndividual = null;
+gdcdata.filterRecords = null;
+
+YAHOO.namespace('ihelp');
+iHelp = YAHOO.ihelp;
+iHelp.data = [];
+iHelp.loaded = [];
+
+(function(){
+
+var Dom = YAHOO.util.Dom;
+var Event = YAHOO.util.Event;
+var Lang = YAHOO.lang;
+var Util = YAHOO.cms.Util;
+
+YAHOO.util.Get.css('../../../cms/css/gdc-media-monitor-mm-ai.css', {});
+YAHOO.util.Get.script(['../../../cms/js/media-monitor.js'], {});
+
+(function getMmHtml () {
+
+    <?php
+
+        $fileWithPath = str_replace('/cms/case', '', __DIR__) . '/assets/js/views/TPM/profileDetail/media-monitor-detail.html';
+        $fileContents = file_get_contents($fileWithPath);
+        $fileContEsc = escJsText($fileContents);
+
+    ?>
+    gdcdata.mmDetailTpl = '<?php echo $fileContEsc; ?>';
+})();
+
+<?php // tabs ?>
+YAHOO.util.Event.onDOMReady(function(){
+
+    var delegate = YAHOO.plugin.Dispatcher.delegate;
+    var tabViewS = new YAHOO.widget.TabView('load_gdc_data',{'orientation':'top'});
+
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-status',
+        label: 'Review',
+        dataSrc: '/cms/case/gdc-status-mm-ai.sec<?php echo $loadScreening; ?>',
+        cacheData: true,
+        active: true
+    }), tabViewS);
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-history',
+        label: 'History',
+        dataSrc: '/cms/case/gdc-history.sec',
+        cacheData: false
+    }), tabViewS);
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-config',
+        label: 'Configure',
+        dataSrc: '/cms/case/gdc-config.sec',
+        cacheData: false
+    }), tabViewS);
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-sources',
+        label: 'Sources',
+        dataSrc: '/cms/thirdparty/profileDetail/gdc-sources.sec',
+        cacheData: true
+    }), tabViewS);
+    //tabViewS.appendTo(document.body);
+    gdcdata.pgdivWidth = 800;
+    gdcdata.pgdivHeight = 450;
+    try {
+        gdcdata.oNameConfig = Lang.JSON.parse('<?php echo $curConfig; ?>');
+        gdcdata.nameConfig = Lang.JSON.parse('<?php echo $curConfig; ?>');
+    } catch (ex) {
+<?php if ($isDeveloper) {
+    $errRef = __FILE__ . ', ' . __LINE__;
+    echo "alert(\"$errRef:" . $dbCls->esc($curConfig) . "\")", ";\n";
+} else {
+    echo "alert('An error occurred while communicating with the server')", ";\n";
+}?>
+    }
+
+    var tabChanged = function(e){
+        var tab = tabViewS.getTab(e.newValue);
+        switch (tab.get('id').substr(7))
+        {
+        case 'status':
+            break;
+        case 'history':
+            break;
+        case 'config':
+            break;
+        }
+    };
+
+    gdcdata.loadScreening = function(scrID)
+    {
+        YAHOO.waitspin.stop('waitspinCfgTabDiv');
+        var tab = tabViewS.getTab(0);
+        tab.set('cacheData', false);
+        tab.set('dataSrc', '/cms/case/gdc-status-mm-ai.sec?scrID=' + scrID);
+        tabViewS.selectTab(0);
+        tab.set('cacheData', true);
+        return false;
+    };
+
+    gdcdata.jmpListDetail = function(scrID)
+    {
+        tabViewS.selectTab(3);
+        return false;
+    };
+
+    tabViewS.subscribe('activeIndexChange', tabChanged);
+    gdcdata.opActive = true;
+
+    var reg = parent.YAHOO.util.Dom.getRegion('gdcpnl_ifr');
+    var reg2 = Dom.getRegion('gdc-case-info');
+    gdcdata.pgdivHeight = reg.height - 45 - reg2.height;
+    gdcdata.pgdivWidth = reg.width - 10;
+    tabViewS.selectTab(0);
+
+    gdcdata.detailPnl = new YAHOO.widget.Panel('gdc-detail-view', {
+        close: true,
+        modal: true,
+        draggable: true,
+        visible: false
+    });
+    gdcdata.detailPnl.rendered = false;
+    Dom.replaceClass('gdc-detail-view', 'disp-none', 'display-block');
+
+    gdcdata.reviewLogPnl = new YAHOO.widget.Panel('gdc-review-log', {
+        close: true,
+        modal: true,
+        draggable: true,
+        visible: false
+    });
+
+    <?php // single elements ?>
+    gdcdata.gdcEvalOptions = document.getElementById('gdc-eval-options');
+    gdcdata.gdcRsnsContainer = document.getElementById('gdc-reasons-container');
+    gdcdata.gdcRsnsDropdown = document.getElementById('gdc-reason-dropdown');
+    gdcdata.gdcRsnsNote = document.getElementById('gdc-note');
+    gdcdata.gdcRsnID = document.getElementById('gdc-reasonid');
+    gdcdata.bulkAdjType = '';
+    gdcdata.bulkAdjTypeCurrent = '';
+
+    <?php // append appropriate options based on match or falsePositive ?>
+    gdcdata.gdcEvalOptions.onchange = function()
+    {
+        $("#gdcCategories").val("");
+        gdcdata.setContainerState(gdcdata.gdcRsnsContainer);
+        gdcdata.setDropdownReasons(gdcdata.gdcRsnsDropdown);
+        gdcdata.setNoteState(gdcdata.gdcRsnsDropdown, gdcdata.gdcRsnsNote);
+    };
+
+    <?php // Sets the bulk status for the bulk adjudication UI ?>
+    gdcdata.setBulkState = function(bulk)
+    {
+        gdcdata.bulkState = bulk;
+    };
+
+    <?php // handles adjudication reasons provided from gdc-ws.sec ?>
+    gdcdata.loadAdjudicationReasons = function(record, match, falsePositive, reason)
+    {
+        <?php // set the match and false positive reasons ?>
+        match = (typeof match !== 'undefined') ? match : null;
+        falsePositive = (typeof falsePositive !== 'undefined') ? falsePositive : null;
+        reason = (typeof reason !== 'undefined') ? reason : null;
+        gdcdata.globalReasons = {};
+        gdcdata.entityReasons = {};
+        gdcdata.globalReasons.match = match;
+        gdcdata.globalReasons.falsePositive = falsePositive;
+        <?php // determine if reasons have been loaded, if not don't bother setting the entityReasons ?>
+        if (typeof match === 'object' && typeof falsePositive === 'object') {
+            gdcdata.entityReasons.match = match;
+            gdcdata.entityReasons.falsePositive = falsePositive;
+        }
+        if (typeof reason == 'object') {
+            gdcdata.entityReasons.current = reason;
+        }
+    };
+
+    <?php // set the container to the appropriate state for current selection and account for existing reasons ?>
+    gdcdata.setInitialState = function(container, dropdown)
+    {
+        <?php // reset the determination in the bulk UI ?>
+        $("#gdc-eval-options-bulk").val("undetermined");
+
+        gdcdata.setContainerState(container);
+        if (gdcdata.entityReasons.current !== null && gdcdata.entityReasons.current !== '') {
+            var flag = gdcdata.getFlag();
+            var previousReason = {
+                'listText' : 'Previous Reason...',
+                'noteText' : gdcdata.entityReasons.current.reasonText,
+                'previousReason' : true,
+                'previousReasonID' : gdcdata.entityReasons.current.reasonID
+            };
+
+            if (typeof gdcdata.entityReasons[flag] === 'object') {
+                gdcdata.entityReasons[flag].push(previousReason);
+            }
+
+        }
+        <?php // set options for the drop down ?>
+        gdcdata.setDropdownReasons(dropdown);
+        if (gdcdata.entityReasons.current !== null) {
+            gdcdata.setNoteState(dropdown, gdcdata.gdcRsnsNote, gdcdata.entityReasons.current.reasonText);
+        } else {
+            gdcdata.setNoteState(dropdown, gdcdata.gdcRsnsNote, null);
+        }
+        gdcdata.setReasonID(dropdown);
+    };
+
+    <?php // Set the reasons in the drop down ?>
+    gdcdata.setDropdownReasons = function(dropdown)
+    {
+        if (dropdown == undefined || dropdown == null) {
+            return;
+        }
+
+        var current = dropdown.current;
+        var flag = gdcdata.getFlag();
+
+        <?php // account for different value for flag on bulk vs single gdc ?>
+        if (flag === 'false') { flag = 'falsePositive'; }
+        if (flag === 'true') { flag = 'match'; }
+        if (current !== flag) {
+            current = flag;
+            dropdown.innerHTML = "";
+            var opt = document.createElement('option');
+            opt.value = '';
+            opt.innerHTML = 'Choose...';
+            dropdown.appendChild(opt);
+            var hasPrevious = false;
+            var selection = (gdcdata.bulkState) ? "globalReasons" : "entityReasons";
+
+            for (var reason in gdcdata[selection][flag]) {
+                var opt = document.createElement('option');
+                opt.value = gdcdata[selection][flag][reason]['noteText'];
+                opt.innerHTML = gdcdata[selection][flag][reason]['listText'];
+                opt.setAttribute('data-reasonid', gdcdata[selection][flag][reason]['id']);
+                dropdown.appendChild(opt);
+
+                <?php // if the element we are currently appending is the previous reason, select it ?>
+                if (gdcdata[selection][flag][reason]['previousReason'] === true) {
+                    hasPrevious = true;
+                    opt.selected = true;
+                    opt.setAttribute('data-reasonid', gdcdata[selection][flag][reason]['previousReasonID']);
+                }
+            }
+            <?php // if we did not receive a previous reason, select the first reason under the current flag ?>
+            if (gdcdata[selection].current == null && flag !== 'undetermined') {
+                var note = dropdown.options[dropdown.selectedIndex].value;
+                gdcdata.setNoteState(dropdown, gdcdata.gdcRsnsNote, note);
+            }
+            <?php // append "other" option to drop down ?>
+            var other = document.createElement('option');
+            other.value = '';
+            other.innerHTML = 'Other';
+            if (hasPrevious) {
+                dropdown.insertBefore(other, dropdown.options[dropdown.options.length - 1]);
+            } else {
+                dropdown.appendChild(other);
+            }
+        }
+        gdcdata.setReasonID(dropdown);
+    };
+
+    <?php // Limits the note length of the adjudication reason textarea ?>
+    gdcdata.limitNoteLength = function(e)
+    {
+        var Dom = YAHOO.util.Dom;
+        var el = gdcdata.bulkState === true ? Dom.get('gdc-note-bulk') : Dom.get('gdc-note');
+        var ncID = gdcdata.bulkState === true ? Dom.get('chars-bulk') : Dom.get('chars-single');
+        var maxlen = 2000;
+        var have = el.value.length;
+        var remain = maxlen - have;
+        if (remain < 0)
+            remain = 0;
+        ncID.innerHTML = have;
+        if (have > maxlen) {
+            el.value = el.value.substring(0, maxlen);
+            gdcdata.showResultDiag('Limit Reached', 'Your Note has reached the maximum size.');
+        }
+    };
+
+    <?php // Set the textarea text when the selected reason changes ?>
+    gdcdata.gdcRsnsDropdown.onchange = function()
+    {
+        gdcdata.setNoteState(gdcdata.gdcRsnsDropdown, gdcdata.gdcRsnsNote);
+    };
+
+    <?php // Gets the "flag" or determination based on the bulk state ?>
+    gdcdata.getFlag = function()
+    {
+        var flag = '';
+        if (!gdcdata.bulkState) {
+            flag = $(".adjudicationStatus").val();
+        } else {
+            flag = $("#gdc-eval-options-bulk").val();
+        }
+        return flag;
+    };
+
+    <?php // Set the state of the container ?>
+    gdcdata.setContainerState = function(container)
+    {
+        var flag = gdcdata.getFlag();
+        if (flag === 'match' || flag === 'true' || flag === 'falsePositive' || flag === 'false') {
+            if (container !== undefined && container !== null) {
+                container.style = "display: block; pointer-events: all; opacity: 1;";
+                container.inUse = true;
+            }
+        } else {
+            if (container !== undefined && container !== null) {
+                container.style = "display: block; pointer-events: none; opacity: 0.3;";
+                container.inUse = false;
+            }
+            if (!gdcdata.bulkState) {
+                gdcdata.setNoteState(gdcdata.gdcRsnsDropdown, gdcdata.gdcRsnsNote, "");
+            } else {
+                gdcdata.setNoteState(gdcdata.gdcRsnsDropdownBulk, gdcdata.gdcRsnsNoteBulk, "");
+            }
+        }
+
+        if (typeof gdcdata.entityReasons.match !== 'object'
+            || typeof gdcdata.entityReasons.falsePositive !== 'object') {
+            console.log('undefined reasons');
+        }
+    };
+
+    <?php // Set the note state ?>
+    gdcdata.setNoteState = function(dropdown, note, reason)
+    {
+        if (dropdown == null || dropdown == undefined) {
+            return;
+        }
+        reason = (typeof reason !== 'undefined') ? reason : null;
+        if (dropdown.offsetParent !== null) {
+            if (reason == null || reason == 'undefined' || reason.length == 0) {
+                if (dropdown.options.length) {
+                    reason = dropdown.options[dropdown.selectedIndex].value;
+                }
+            }
+        }
+        <?php // if the default 'choose' option is currently selected, empty note text and hide textarea?>
+        if (dropdown.selectedIndex == 0) {
+            note.style.display = "none";
+            note.value = "";
+        } else {
+            note.style.display = "block";
+        }
+        reason = (reason == 'null' || reason == null) ? '' : reason;
+        <?php // duck typing IE8 and IE9 in quirks mode to prevent note setting failure ?>
+        if (window.attachEvent && !window.addEventListener) {
+            note.value = reason;
+        } else {
+            var placeholder = document.createElement("textarea");
+            placeholder.innerHTML = reason;
+            note.value = placeholder.value;
+        }
+        gdcdata.limitNoteLength();
+        gdcdata.setReasonID(dropdown);
+    };
+
+    gdcdata.setReasonID = function(dropdown)
+    {
+        if (dropdown == null || dropdown == undefined) {
+            return;
+        }
+        var reasonID = null;
+        if (gdcdata.getFlag() === 'undetermined') {
+            (gdcdata.bulkState) ? gdcdata.gdcRsnIDBulk.value = reasonID : gdcdata.gdcRsnID.value = reasonID;
+        } else if (dropdown.offsetParent !== null && dropdown.options.length) {
+            var current = dropdown.options[dropdown.selectedIndex];
+            reasonID = current.getAttribute('data-reasonid');
+            <?php // set the hidden input for our reasonID?>
+            (gdcdata.bulkState) ? gdcdata.gdcRsnIDBulk.value = reasonID : gdcdata.gdcRsnID.value = reasonID;
+        }
+    };
+
+    gdcdata.reviewLogPnl.rendered = false;
+    //Dom.replaceClass('gdc-review-log', 'disp-none', 'display-block');
+
+    <?php // Hide and show iframe modal's close button when detail panel is active ?>
+    gdcdata.detailPnl.showEvent.subscribe(function(o){
+        parent.window.YAHOO.gdcifr.showPanelClose(false);
+    });
+    gdcdata.detailPnl.hideEvent.subscribe(function(o){
+        parent.window.YAHOO.gdcifr.showPanelClose(true);
+    });
+
+    gdcdata.detailUpdateBtn = new YAHOO.widget.Button('gdc-detail-update-btn', {
+        label: 'Update',
+        type: 'button'
+    });
+    gdcdata.detailUpdateBtn.on('click', function(o){
+        var btn = document.getElementById('gdc-detail-update-btn-button');
+        var flag = $("#gdc-eval-options").val();
+        var reason = (gdcdata.gdcRsnsNote.value !== null) ? gdcdata.gdcRsnsNote.value : "";
+        var reasonID = (gdcdata.gdcRsnID.value !== null) ? gdcdata.gdcRsnID.value : "";
+        var loc = (btn.getAttribute('data-location') == 'save-eval') ? 'save-eval' : 'mm-save-eval';
+        var id = (loc == 'save-eval') ? null : btn.getAttribute('data-source_recid');
+        if (loc == 'save-eval') {
+            gdcdata.opRequest(loc, flag, reason, reasonID);
+        } else {
+            gdcdata.opRequest(loc, flag, reason, reasonID, id);
+        }
+
+        gdcdata.entityReasons = {};
+    });
+
+    <?php // counts the number of elements which are visible on the page ?>
+    gdcdata.countVisibleElements = function(elements)
+    {
+        var counter = 0;
+        if (!elements) {
+            return counter;
+        }
+        [].forEach.call(elements, function (el) {
+            if (el.style.display != 'hidden' && el.style.display != 'none') {
+                counter++;
+            }
+        });
+        return counter;
+    };
+
+    <?php // counts the number of checkboxes with checked property ?>
+    gdcdata.getCheckedState = function(elements)
+    {
+        var counter = 0;
+        if (!elements) {
+            return counter;
+        }
+        [].forEach.call(elements, function (el) {
+            if (el.checked) {
+                counter++;
+            }
+        });
+        return counter;
+    };
+
+    <?php // determines how many checkboxes exist for both result types as well as their checked status ?>
+    gdcdata.getBulkResultDetails = function()
+    {
+        var struct = {
+            gdcCount : 0,
+            mmCount  : {
+                top    : 0,
+                bottom : 0
+            },
+            gdcChecked : 0,
+            mmChecked  : {
+                total  : 0,
+                top    : 0,
+                bottom : 0
+            }
+        };
+
+        var gdcChk      = document.getElementsByClassName('gdc-res-chk');
+        var mmChkTop    = document.querySelectorAll('[data-anchor="top"]');
+        var mmChkBottom = document.querySelectorAll('[data-anchor="bottom"]');
+        var mmChk       = document.getElementsByClassName('gdc-mm-res-chk');
+
+        struct.gdcCount         = gdcdata.countVisibleElements(gdcChk);
+        struct.mmCount.top      = gdcdata.countVisibleElements(mmChkTop);
+        struct.mmCount.bottom   = (gdcdata.countVisibleElements(mmChkBottom)-1);
+        struct.gdcChecked       = gdcdata.getCheckedState(gdcChk);
+        struct.mmChecked.top    = gdcdata.getCheckedState(mmChkTop);
+        struct.mmChecked.bottom = gdcdata.getCheckedState(mmChkBottom);
+        struct.mmChecked.total  = (struct.mmChecked.top + struct.mmChecked.bottom);
+
+        return struct;
+    };
+
+    <?php // an attempt at reproducing array.length for objects with IE9+ compatibility ?>
+    gdcdata.getObjectLength = function(object)
+    {
+        var length = 0;
+        for( var key in object ) {
+            if( object.hasOwnProperty(key) ) {
+                ++length;
+            }
+        }
+        return length;
+    };
+
+    gdcdata.detailUpdateBtn = new YAHOO.widget.Button('gdc-detail-update-btn', {
+        label: 'Submit',
+        type: 'button'
+    });
+
+    gdcdata.detailCancelBtn = new YAHOO.widget.Button('gdc-detail-cancel-btn', {
+        label: 'Cancel',
+        type: 'button'
+    });
+    gdcdata.detailCancelBtn.on('click', function(o){
+        gdcdata.adjudicationClose();
+    });
+    gdcdata.adjudicationClose = function() {
+        $('#gdc-detail-view').removeClass('open');
+        $("body").css('overflow', "scroll");
+        gdcdata.gdcRsnsContainer.style.display = 'none';
+        setTimeout(function() {
+            gdcdata.detailPnl.hide();
+        }, 300);
+        gdcdata.setBulkState(true);
+    };
+});
+
+var gdcFlagSym = { <?php
+$first = 1;
+foreach ($gdc->flagImage as $flag => $img) {
+    if (!$first) {
+        echo ",\n";
+    } else {
+        $first = 0;
+    }
+    echo "$flag: '$img'";
+}
+echo "\n";
+?>
+};
+
+gdcdata.showSingleRecord = function(rec, recFlag, isCurrent) {
+    Dom.get('gdc-detail').innerHTML = '&nbsp;';
+    Dom.setStyle('gdc-detail', 'width', '430px');
+    var txt = '<table id="gdc-rec-tbl" class="gdc-detailcls" width="400" cellspacing="2" cellpadding="3">\n';
+    var isICIJ = false;
+    var hidden = [
+        'MM',
+        'Hash',
+        'screeningID',
+        'tpID',
+        'RecType',
+    ];
+
+    <?php if (!$mmShowRecId) { ?>
+    hidden.push('source_recid');
+    <?php } ?>
+
+    for (var fld in rec) {
+        if (hidden.indexOf(fld) !== -1) {
+            continue;
+        }
+        if (fld == 'MediaLink') {
+            txt += '<tr>\n'
+                + '  <td class="fld">' + "Media Link" + '</td>\n'
+                + '  <td class="data"><a target="_blank" href="' + rec[fld] + '">' + rec[fld] + '</a></td>\n'
+                + '</tr>\n';
+        } else if (fld == 'remediation') {
+            var val = rec[fld] == 1 ? 'Yes' : 'No';
+            txt += '<tr>\n'
+                + '  <td class="fld">' + "Remediated?" + '</td>\n'
+                + '  <td class="data">' + val + '</td>\n'
+                + '</tr>\n';
+        } else if (fld == 'remediationReason') {
+            txt += '<tr>\n'
+                + '  <td class="fld">' + "Remediation Reason" + '</td>\n'
+                + '  <td class="data">' + rec[fld] + '</td>\n'
+                + '</tr>\n';
+        } else if (fld == 'source_recid') {
+            txt += '<tr>\n'
+                + '  <td class="fld">' + "Rec ID" + '</td>\n'
+                + '  <td class="data">' + rec[fld] + '</td>\n'
+                + '</tr>\n';
+        } else {
+            txt += '<tr>\n'
+                + '  <td class="fld">' + fld + '</td>\n'
+                + '  <td class="data">' + rec[fld] + '</td>\n'
+                + '</tr>\n';
+        }
+
+        if (fld == 'Refinement' && rec['Refinement'] == '') {
+            continue;
+        }
+
+        if ((rec[fld] == 'ICIJ') || (rec[fld] == 'International Consortium of Investigative Journalists')) {
+            isICIJ = true;
+        }
+
+        var titleTxt = document.getElementById('panelFormTitle');
+        var reviewLink = document.getElementById('gdc-review-link');
+        var updateBtn = document.getElementById('gdc-detail-update-btn-button');
+        if (rec.hasOwnProperty('MM')) {
+            titleTxt.innerHTML = 'Source Record Detail from Media Monitor';
+            reviewLink.setAttribute("onClick", "gdcdata.controlBasisSummary('audit-log-img', 'gdc-review-log-contentcls', 2, '" + rec.source_recid + "', '" + rec.tpID + "')");
+            updateBtn.setAttribute("data-location", "mm-save-eval");
+            updateBtn.setAttribute("data-source_recid", rec.source_recid);
+        } else {
+            titleTxt.innerHTML = 'Source Record Detail from Global Database Check';
+            reviewLink.setAttribute("onClick", "gdcdata.controlBasisSummary('audit-log-img', 'gdc-review-log-contentcls', 1)");
+            updateBtn.setAttribute("data-location", "save-eval");
+        }
+    }
+    if (isICIJ) {
+        txt += gdcdata.getICIJAttribution();
+    }
+    txt += '</table>';
+    txt = "<div class=\"basis-summary-header\" onclick=\"gdcdata.controlBasisSummary('gdc-hits-img', 'gdc-detailcls', 0)\"><img class=\"gdc-hits-img\" src=\"<?php echo $sitepath; ?>/aws/images/expand.png\"><span class=\"fw-bold basis-summary-title\">GDC hit details</span></div>" + txt;
+    Dom.get('gdc-detail').innerHTML = txt;
+
+    $('#gdc-eval-options').val(recFlag);
+
+    if (isCurrent) {
+        Dom.removeClass('gdc-detail-update-btn', 'v-hidden');
+        gdcdata.detailCancelBtn.set('label', 'Cancel');
+    } else {
+        Dom.addClass('gdc-detail-update-btn', 'v-hidden');
+        gdcdata.detailCancelBtn.set('label', 'Close');
+    }
+    gdcdata.showDetailPanel();
+};
+
+gdcdata.showDualRecords = function(rec, prec, flag, isCurrent) {
+    Dom.get('gdc-detail').innerHTML = '&nbsp;';
+    Dom.setStyle('gdc-detail', 'width', '672px');
+    var pimg = '<img src="' + gdcFlagSym[flag] + '" alt="" title="" />';
+    var txt = '<table id="gdc-rec-tbl" width="643" cellspacing="2" cellpadding="3">\n'
+        + '<tr>\n'
+        + '  <th width="25%">Field</th>\n'
+        + '  <th width="37%">Data</th>\n'
+        + '  <th>Previous Data &nbsp; ' + pimg + '</th>\n'
+        + '</tr>\n';
+    var isICIJ = false;
+    for (var fld in rec) {
+        var cls = 'data';
+        switch (fld) {
+        case 'Published':
+        case 'Updated':
+            break;
+        default:
+            if (rec[fld] != prec[fld]) {
+                cls = 'diff';
+            }
+        }
+        txt += '<tr>\n'
+            + '  <td class="fld">' + fld + '</td>\n'
+            + '  <td class="' + cls + '">' + rec[fld] + '</td>\n'
+            + '  <td class="data">' + prec[fld] + '</td>\n'
+            + '</tr>\n';
+        if ((rec[fld] == 'ICIJ') || (rec[fld] == 'International Consortium of Investigative Journalists')) {
+            isICIJ = true;
+        }
+    }
+    if (isICIJ) {
+        txt += gdcdata.getICIJAttribution();
+    }
+    txt += '</table>';
+    Dom.get('gdc-detail').innerHTML = txt;
+    var flagID = 'gdc-eval-' + flag;
+    var flag = Dom.get(flagID);
+
+    if (flag != null) {
+        Dom.get(flagID).checked = true;
+    }
+
+    if (isCurrent) {
+        Dom.removeClass('gdc-detail-update-btn', 'v-hidden');
+    } else {
+        Dom.addClass('gdc-detail-update-btn', 'v-hidden');
+    }
+    gdcdata.showDetailPanel();
+};
+
+gdcdata.getICIJAttribution = function()
+{
+   var txt = '<tr>\n'
+        + '  <td class="ICIJAttribution" colspan="2">'
+        + 'Contains information from the International Consortium of Investigative Journalists Offshore Leaks '
+        + 'Database: [https://offshoreleaks.icij.org/pages/database], which is made available here under the '
+        + 'Open Database License (ODbL).'
+        + '</td>\n'
+        + '</tr>\n';
+    return txt;
+};
+
+gdcdata.showDetailPanel = function()
+{
+    var pnl = gdcdata.detailPnl;
+    if (!pnl.rendered) {
+        pnl.render(document.body);
+        pnl.rendered = true;
+    }
+    <?php // Fit report to content or max height at 95% of viewport ?>
+    var rptEl = Dom.get('gdc-detail'); <?php // formatted detail container ?>
+    var pnlEl = Dom.get('gdc-detail-view'); <?php // panel ?>
+    Dom.getElementsByClassName('bd', 'div', pnlEl, function(el){
+        Dom.setStyle(el,'background-color','#ffffff');
+    });
+    var region = Dom.getClientRegion();
+    Dom.setStyle(rptEl, 'overflow', 'hidden');
+    Dom.setStyle(rptEl, 'height', '0pt');
+    pnl.center();
+    pnl.show();
+    var maxPanelHeight = 0.98 * (region.bottom - region.top);
+    var curPanelHeight = parseInt(Dom.getStyle(pnlEl, 'height'));
+    if (isNaN(curPanelHeight)) {
+        curPanelHeight = parseInt(pnlEl.offsetHeight);
+        if (isNaN(curPanelHeight)) {
+            curPanelHeight = 197; <?php // I give up! How 'bout a guess? ?>
+        }
+    }
+    var pixToAdd = rptEl.scrollHeight + 5;
+    if ((curPanelHeight + pixToAdd) > maxPanelHeight) {
+        pixToAdd = maxPanelHeight - curPanelHeight;
+    }
+    if (pixToAdd < 30) {
+        pixToAdd = 30;
+    }
+    var topToMove = pixToAdd / 2;
+    var curPanelTop = pnl.cfg.getProperty('y');
+    pnl.cfg.setProperty('y', curPanelTop - topToMove);
+    Dom.setStyle(rptEl, 'overflow', 'auto');
+    Dom.setStyle(rptEl, 'height', 'auto');
+};
+
+iHelp.autoLoad = function(help_id, el){
+    if (!Util.in_array(help_id, iHelp.loaded))
+        gdcdata.opRequest('load-help', help_id, el);
+    else
+        iHelp.toggle(help_id, el);
+    return false;
+};
+
+gdcdata.multiError = function(title, msgArray)
+{
+    if (title.length && msgArray.length)
+    {
+        var i, msg;
+        if (Lang.isArray(msgArray))
+        {
+            if (msgArray.length == 1) {
+                msg = '<b>An error occurred</b>:<ul>';
+            } else {
+                msg = '<b>The following errors occurred</b>:<ul>';
+            }
+            for (i in msgArray) {
+                msg += '<li>' + msgArray[i] + '</li>';
+            }
+            msg += '</ul>';
+        } else {
+            msg = msgArray;
+        }
+        gdcdata.showResultDiag(title, msg);
+    }
+};
+
+gdcdata.showResultDiag = function(headHTML, bodyHTML)
+{
+    if (!resultDiag.rendered) {
+        resultDiag.rendered = true;
+        resultDiag.render(document.body);
+    }
+    resultDiag.setHeader(headHTML);
+    resultDiag.setBody(bodyHTML);
+    resultDiag.show();
+};
+
+var resultDiag = new YAHOO.widget.SimpleDialog("result-dlg", {
+    width: "300px",
+    fixedcenter: "contained",
+    visible: false,
+    modal: true,
+    draggable: true,
+    close: false,
+    constraintoviewport: false,
+    buttons: [
+        {
+        text:"Ok", handler: function()
+        {
+            this.hide();
+            if (gdcdata.redirectToReviewTab == true) {
+                gdcdata.redirectToReviewTab = false;
+                gdcdata.loadScreening(<?php if (isset($_GET['ls'])) { echo $_GET['ls']; } ?>);
+            }
+        }, isDefaut:true }
+    ]
+});
+resultDiag.rendered = false;
+
+<?php if ($bulkAdjudEnabled) { ?>
+    gdcdata.SelectAll = function(mode)
+    {
+        var gdcChk     = document.getElementsByClassName('gdc-res-chk');
+        var mmChk      = document.getElementsByClassName('gdc-mm-res-chk');
+        var checkboxes = (mode == 'gdc') ? gdcChk : mmChk;
+        var opposite   = (mode == 'gdc') ? mmChk : gdcChk;
+        var length     = (mode == 'gdc') ? gdcChk.length : mmChk.length;
+
+        if (gdcdata.getCheckedState(opposite) == 0) {
+            for (var i = 0; i < length; i++) {
+                checkboxes[i].checked = true;
+            }
+        }
+
+        gdcdata.updateBulkUI();
+    };
+
+    gdcdata.UnselectAll = function (mode)
+    {
+        var gdcChk     = document.getElementsByClassName('gdc-res-chk');
+        var mmChk      = document.getElementsByClassName('gdc-mm-res-chk');
+        var checkboxes = (mode == 'gdc') ? gdcChk : mmChk;
+        var opposite   = (mode == 'gdc') ? mmChk : gdcChk;
+        var length     = (mode == 'gdc') ? gdcChk.length : mmChk.length;
+
+        if (gdcdata.getCheckedState(opposite) == 0) {
+            for (var i = 0; i < length; i++) {
+                checkboxes[i].checked = false;
+            }
+        }
+
+        gdcdata.updateBulkUI();
+    };
+
+    gdcdata.InvertAll = function (mode)
+    {
+        var gdcChk     = document.getElementsByClassName('gdc-res-chk');
+        var mmChk      = document.getElementsByClassName('gdc-mm-res-chk');
+        var checkboxes = (mode == 'gdc') ? gdcChk : mmChk;
+        var opposite   = (mode == 'gdc') ? mmChk : gdcChk;
+        var length     = (mode == 'gdc') ? gdcChk.length : mmChk.length;
+
+        if (gdcdata.getCheckedState(opposite) == 0) {
+            for (var i = 0; i < length; i++) {
+                checkboxes[i].checked = (checkboxes[i].checked == true) ? false : true;
+            }
+        }
+
+        gdcdata.updateBulkUI();
+    };
+
+    gdcdata.showBulkDiag = function(headHTML, bodyHTML)
+    {
+        var totalids=document.getElementsByName('bulkids[]').length;
+        var total_selected = 0;
+        for (var i=0; i<totalids; i++) {
+            var val = document.getElementsByName('bulkids[]')[i].checked;
+            if (val == true) {
+                total_selected++;
+            }
+        }
+        if (total_selected > 0) {
+            if (!bulkDialog.rendered) {
+                bulkDialog.rendered = true;
+                bulkDialog.render(document.body);
+            }
+            bulkDialog.setHeader(headHTML);
+            var elements=document.getElementsByName('bulk_match');
+            for (i=0; i<elements.length; i++) {
+                if (elements[i].checked) {
+                    var bulkmatch=i;
+                }
+            }
+            if (bulkmatch == 0) {
+                var determination_str = 'True Match';
+            } else if (bulkmatch == 1) {
+                var determination_str = 'Undetermined';
+            } else {
+                var determination_str = 'False Positive';
+            }
+            var msg = bodyHTML + '<br /><br />Record(s) selected: <strong>' + total_selected
+                + '</strong><br /><br />Proceed with applying bulk determination'
+                + ' of <strong>`' + determination_str + '`</strong> to selected record(s)?';
+            bulkDialog.setBody(msg);
+            bulkDialog.show();
+        } else {
+            if (!resultDiag.rendered) {
+                resultDiag.rendered = true;
+                resultDiag.render(document.body);
+            }
+            resultDiag.setHeader('Error');
+            resultDiag.setBody('You must select at least one record to apply bulk determination');
+            resultDiag.show();
+        }
+    };
+
+    var bulkDialog = new YAHOO.widget.SimpleDialog("bulk-dlg", {
+        width: "450px",
+        fixedcenter: "contained",
+        visible: false,
+        modal: true,
+        draggable: true,
+        close: false,
+        constraintoviewport: false,
+        buttons: [ { text:"Proceed", handler: function()
+                     {
+                         <?php // Determine each of screening IDs and whether screening IDs are selected ?>
+                         var totalids=document.getElementsByName('bulkids[]').length;
+                         var bulkids = new Array();
+                         var bulkvals = new Array();
+                         var min_selected = false;
+                         var bulkreason = gdcdata.gdcRsnsNoteBulk.value;
+                         var bulkreasonID = gdcdata.gdcRsnIDBulk.value;
+                         for (var i=0; i<totalids; i++) {
+                             bulkids[i] = document.getElementsByName('bulkids[]')[i].value;
+                             if (document.getElementsByName('bulkids[]')[i].checked == true) {
+                                 bulkvals[i]='1';
+                             } else {
+                                 bulkvals[i]='0';
+                             }
+                         }
+                         <?php // Determines the ID of the selected bulk action ?>
+                         var elements=document.getElementsByName('bulk_match');
+                         for (i=0; i<elements.length; i++) {
+                             if (elements[i].checked) {
+                                 var bulkmatch=i;
+                             }
+                         }
+                         <?php // check adjudication mode and call appropriate case ?>
+                         if (gdcdata.bulkAdjType == 'gdc') {
+                             gdcdata.opRequest('bulk-update', bulkids, bulkvals, bulkmatch,
+                                 encodeURIComponent(bulkreason), bulkreasonID);
+                         } else if (gdcdata.bulkAdjType == 'mm') {
+                             gdcdata.opRequest('mm-bulk-update', bulkids, bulkvals, bulkmatch,
+                                 encodeURIComponent(bulkreason), bulkreasonID);
+                         }
+                         this.hide();
+                     }, isDefaut:true }
+                  ,
+                       { text:"Cancel", handler: function()
+                         {
+                             this.hide();
+                         }, isDefaut:false }
+                 ]
+    });
+    bulkDialog.rendered = false;
+    <?php
+}
+?>
+    gdcdata.listDesc = function(ele, listId)
+    {
+        if (!Util.in_array(listId, gdcdata.loadedDesc))
+            gdcdata.opRequest('listDesc', listId, ele);
+        else
+            iHelp.toggle(listId, ele);
+    };
+    gdcdata.bulkchecked = function()
+    {
+        var selected = new Array();
+        $(".selectRow:checked").each(function () {
+            selected.push(this.value);
+        });
+        if (selected.length > 1) {
+            $(".ai-action-details").css("display", "");
+            $(".ai-rows-selected").html("(" + selected.length + ") articles selected");
+        } else {
+            $(".ai-action-details").css("display", "none");
+        }
+    };
+    gdcdata.auditLoghandle = function(logDate)
+    {
+        if ($('.single-audit-' + logDate).hasClass('active')) {
+            $('.single-audit-' + logDate).removeClass('active');
+        } else {
+            $('.single-audit-' + logDate).addClass('active');
+        }
+    };
+    gdcdata.controlBasisSummary = function(imgClass, divClass, callReview, sourceRecID, tpID)
+    {
+        if ($('.' + imgClass).hasClass('active')) {
+            if (callReview == 1 || callReview == 2) {
+                var hasContent = $("#gdc-review-log-content").html();
+                if (hasContent == '' && callReview == 1) {
+                    gdcdata.opRequest('review-log');
+                } else if (hasContent == '' && callReview == 2) {
+                    gdcdata.opRequest('mm-review-log', sourceRecID, tpID);
+                }
+            }
+            $('.' + imgClass).removeClass('active');
+            $('.' + divClass).css('display', '');
+        } else {
+            $('.' + imgClass).addClass('active');
+            $('.' + divClass).css('display', 'none');
+        }
+    };
+    gdcdata.bulkAdjudicationSave = function() {
+    let bulkids = new Array();
+    let bulkvals = new Array();
+    let gdcReviewAuth = gdcdata.auth;
+    let op;
+    let bulkmatch;  // 0 - true match, 1 - undetermined, 2 - false positive
+    let gdcBulkOptionsEval = $('#gdc-eval-options-bulk').val();
+    if (gdcBulkOptionsEval == 'match') {
+        bulkmatch = 0;
+    } else if (gdcBulkOptionsEval == 'falsePositive') {
+        bulkmatch = 2;
+    } else {
+        bulkmatch = 1;
+    }
+    let bulkreason = $('#gdc-note-bulk').val();
+    let bulkreasonID = $('#gdc-reasonid-bulk').val();
+    $('.selectRow:checked').each(function () {
+        bulkids.push(this.value);
+        bulkvals.push(1);
+    });
+    let summaryResults = $("#gdc-mm-filter-tab .gdc-mm-tab.active").data("source");
+    if (summaryResults == 'gdc') {
+        op = 'bulk-update';
+    } else if (summaryResults == 'mm') {
+        op = 'mm-bulk-update';
+    }
+    gdcdata.opRequest(op, bulkids, bulkvals, bulkmatch, encodeURIComponent(bulkreason), bulkreasonID);
+    $('#bulkAdjudicationPopup').removeClass('open');
+    $("body").css('overflow', "scroll");
+    document.getElementById("modalBackground").style = "display:none";
+};
+gdcdata.bulkAdjudication = function() {
+    $('#bulkAdjudicationPopup').addClass('open');
+    $("body").css('overflow', "hidden");
+    let selected = new Array();
+    $('.selectRow:checked').each(function () {
+        selected.push(this.value);
+    });
+    $('#articleSelect').html(selected.length + ' Articles');
+    let summaryResults = $("#gdc-mm-filter-tab .gdc-mm-tab.active").data("source");
+    if (summaryResults == 'gdc') {
+        gdcdata.bulkAdjTypeCurrent = 'gdc';
+    } else if (summaryResults == 'mm') {
+        gdcdata.bulkAdjTypeCurrent = 'mm';
+    }
+    gdcdata.setBulkState(true);
+    $('#gdc-eval-options-bulk').val('undetermined');
+    $('#gdc-eval-options-bulk').change();
+    document.getElementById("modalBackground").style = "display:block";
+};
+gdcdata.bulkchecked = function()
+{
+    let selected = new Array();
+    $('.selectRow:checked').each(function () {
+        selected.push(this.value);
+    });
+    if (selected.length > 1) {
+        $('.ai-action-details').css('display', '');
+        $('.ai-rows-selected').html('(' + selected.length + ') articles selected');
+    } else {
+        $('.ai-action-details').css('display', 'none');
+    }
+};
+
+gdcdata.changeScreenResult = function()
+{
+    let summaryResults = $("#gdc-mm-filter-tab .gdc-mm-tab.active").data("source");
+    let action, actionLabel = 'Action';
+    let statusFilter = $("#gdc-mm-status-filter").val();
+    let gdcRemedFilter = $("#gdc-mm-remediated-filter").val();
+    let dataSourceFilter = $("#gdc-source-filter").val();
+    let linkFilter = $("#mm-summary-link-filter").val();
+
+    if (gdcdata.filterRecords.gdcMMStatusFilter[summaryResults].includes(statusFilter) === false) {
+        statusFilter = 'all';
+    }
+
+    <?php if (!$aiSummarisationEnabled){ ?>
+        linkFilter = 'all';
+        $(".mm-summary-filter").css('display', 'none');
+    <?php } ?>
+
+    var gdcData = gdcdata.data;
+
+
+    let dataSourceFilterOptions = "<option value='all'>Any</option>";
+    for (let i = 0; i < gdcdata.filterRecords.gdcHitsDataSourceFilter.length; i++) {
+        let isSelected = (gdcdata.filterRecords.gdcHitsDataSourceFilter[i] == dataSourceFilter) ? "selected" : "";
+        dataSourceFilterOptions += "<option " + isSelected + " value='" + gdcdata.filterRecords.gdcHitsDataSourceFilter[i] + "'>" + gdcData.TableTrans[gdcdata.filterRecords.gdcHitsDataSourceFilter[i]] + "</option>";
+    }
+    $("#gdc-source-filter").html(dataSourceFilterOptions);
+
+    var dataSourceOption = "<option value='all'>Any</option>";
+    for (let filter in gdcdata.filterRecords.mmHitsLinkStatusFilter) {
+        var optionName;
+        if (gdcdata.filterRecords.mmHitsLinkStatusFilter[filter] == 0) {
+            optionName = "Invalid";
+        } else if (gdcdata.filterRecords.mmHitsLinkStatusFilter[filter] == 1) {
+            optionName = "Valid";
+        } else if (gdcdata.filterRecords.mmHitsLinkStatusFilter[filter] == 2) {
+            optionName = "Validation in progress";
+        } else if (gdcdata.filterRecords.mmHitsLinkStatusFilter[filter] == 3) {
+            optionName = "Inconclusive";
+        }
+        let isSelected = (gdcdata.filterRecords.mmHitsLinkStatusFilter[filter] == linkFilter) ? "selected" : "";
+        dataSourceOption += "<option " + isSelected  + " value='" + gdcdata.filterRecords.mmHitsLinkStatusFilter[filter] + "'>" + optionName + "</option>";
+    }
+    $("#mm-summary-link-filter").html(dataSourceOption);
+
+
+    let statusFilterOptions = "<option value='all'>Any</option>";
+    for (let i = 0; i < gdcdata.filterRecords.gdcMMStatusFilter[summaryResults].length; i++) {
+        let statusStr = "";
+        if (gdcdata.filterRecords.gdcMMStatusFilter[summaryResults][i] == "falsePositive") {
+            statusStr = "False positive";
+        } else if (gdcdata.filterRecords.gdcMMStatusFilter[summaryResults][i] == "match") {
+            statusStr = "True Match";
+        } else if (gdcdata.filterRecords.gdcMMStatusFilter[summaryResults][i] == "undetermined") {
+            statusStr = "Undetermined";
+        }
+        let isSelected = (gdcdata.filterRecords.gdcMMStatusFilter[summaryResults][i] == statusFilter) ? "selected" : "";
+        statusFilterOptions += "<option " + isSelected + " value='" + gdcdata.filterRecords.gdcMMStatusFilter[summaryResults][i] + "'>" + statusStr + "</option>";
+    }
+    $("#gdc-mm-status-filter").html(statusFilterOptions);
+
+    if (gdcdata.filterRecords.gdcMMRemedFilter[summaryResults].includes(gdcRemedFilter) === false) {
+        gdcRemedFilter = 'all';
+    }
+    let remedFilterOptions = "<option value='all'>Any</option>";
+    for (let i = 0; i < gdcdata.filterRecords.gdcMMRemedFilter[summaryResults].length; i++) {
+        let remedStr = "";
+        if (gdcdata.filterRecords.gdcMMRemedFilter[summaryResults][i] == "1") {
+            remedStr = "Yes";
+        } else {
+            remedStr = "No";
+        }
+        let isSelected = (gdcdata.filterRecords.gdcMMRemedFilter[summaryResults][i] == gdcRemedFilter) ? "selected" : "";
+        remedFilterOptions += "<option " + isSelected + " value='" + gdcdata.filterRecords.gdcMMRemedFilter[summaryResults][i] + "'>" + remedStr + "</option>";
+    }
+    $("#gdc-mm-remediated-filter").html(remedFilterOptions);
+    if (summaryResults == "gdc") {
+        $(".gdc-summary-filter").css("display", "");
+        $(".mm-summary-filter").css("display", "none");
+        var preloadedData = [];
+        for (tbl in gdcData.TableTrans) {
+            if (gdcData.Hits[tbl] == undefined || gdcData.Hits[tbl].length == 0) {
+                continue;
+            }
+            for (i in gdcData.Hits[tbl]) {
+                var value = gdcData.Hits[tbl][i];
+                if (
+                    (statusFilter == 'all' || statusFilter == value.flag) &&
+                    (dataSourceFilter == 'all' || dataSourceFilter == tbl)
+                ) {
+                    var dataSource = "<span class=\"media-monitor-span\">" + value.dataSoruce + "</span>";
+                    var fillName = "<span class=\"media-monitor-span\">" + value.name + "</span>";
+                    var category = "<span class=\"media-monitor-span\">" + value.category + "</span>";
+                    var country = "<span class=\"media-monitor-span\">" + value.country + "</span>";
+                    var publishedDate = "<span class=\"media-monitor-span\">" + value.publicationDate.replaceAll(".","/") + "</span>";
+                    var statusStr = "";
+                    var imageUrl = "";
+                    if (value.flag == "falsePositive") {
+                        statusStr = "False positive";
+                        imageUrl = "<?php echo $sitepath; ?>/aws/images/falsepositive.png";
+                    } else if (value.flag == "match") {
+                        statusStr = "True Match";
+                        imageUrl = "<?php echo $sitepath; ?>/aws/images/truepossitive.png";
+                    } else if (value.flag == "undetermined") {
+                        statusStr = "Undetermined";
+                        imageUrl = "<?php echo $sitepath; ?>/aws/images/undetermined.png";
+                    }
+                    var status = "<div class=\"true-false-td\"><image class=\"true-false-img\" src=\"" + imageUrl + "\"><span class=\"media-monitor-span media-monitor-span-width\">" + statusStr + "</span></div>";
+                    idType = (value.type == 'P') ? 'Person' : 'Entity';
+                    typeOfFunc = "onclick=\"gdcdata.opRequest('load-detail', '" + tbl + "', '" + value.ref + "', '"
+                        + encodeURIComponent(value.reason) + "', '" + value.reasonID + "', '" + idType + "')\"";
+                    if (value.status == "new") {
+                        action = "<div class=\"media-monitor-detfill\" " + typeOfFunc + "><image class=\"media-monitor-det\" src=\"<?php echo $sitepath; ?>/aws/images/edit.png\"></div>";
+                    } else {
+                        action = "<div class=\"media-monitor-detblank\" " + typeOfFunc + "><image class=\"media-monitor-det\" src=\"<?php echo $sitepath; ?>/aws/images/edit-note.png\"></div>";
+                    }
+                    var loadData = { dataSource: dataSource, fillName: fillName, category: category, country: country, publishedDate: publishedDate, status: status, action: action };
+                    <?php if ($bulkAdjudEnabled) { ?>
+                        var ckbox = "<input class=\"selectRow\" onClick=\"gdcdata.bulkchecked()\" name=\"bulkids[]\" value=\"" + value.ref + ":" + tbl + "\" type=\"checkbox\">";
+                        loadData.ckbox = ckbox;
+                    <?php } ?>
+                    preloadedData.push(loadData);
+                }
+            }
+        }
+        var myColumnDefs = [];
+        <?php if ($bulkAdjudEnabled) { ?>
+            myColumnDefs.push({ key: "ckbox", label: "", sortable: false, width: 50 });
+        <?php } ?>
+        myColumnDefs.push({ key: "dataSource", label: "Data source", className: 'fixedLength-gdc', sortable: true, width: 250 });
+        myColumnDefs.push({ key: "fillName", label: "Full name", className: 'fixedLength-gdc', sortable: true, width: 100 });
+        myColumnDefs.push({ key: "category", label: "Category", sortable: true, width: 100 });
+        myColumnDefs.push({ key: "country", label: "Country", className: 'fixedLength-gdc', sortable: true, width: 100 });
+        myColumnDefs.push({ key: "publishedDate", label: "Published date", sortable: true, width: 100 });
+        myColumnDefs.push({ key: "status", label: "Status", sortable: true, width: 100 });
+        myColumnDefs.push({ key: "action", label: actionLabel, sortable: true, width: 100 });
+        var myDataSource = new YAHOO.util.DataSource(preloadedData);
+        myDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+        myDataSource.responseSchema = {
+            fields: ["ckbox", "dataSource", "fillName", "category", "country", "publishedDate", "status", "action"]
+        };
+    } else {
+        $(".gdc-summary-filter").css("display", "none");
+        <?php if ($aiSummarisationEnabled) { ?>
+            $(".mm-summary-filter").css("display", "");
+        <?php } ?>
+        var preloadedData = [];
+        var gdcData = gdcdata.data;
+        if (gdcData.mmResults == undefined) {
+            gdcData.mmResults = {};
+        }
+        var mmHits = Object.values(gdcData.mmResults);
+        for (review in gdcData.mmReviews) {
+            gdcData.mmReviews[review].reviewed = true;
+            mmHits.push(gdcData.mmReviews[review]);
+        }
+
+        const checkLinkStatus = function(urllinkStatus, linkStatusFilter) {
+            var validLink = false;
+            if (linkStatusFilter == 'all') {
+                return true;
+            } else if (linkStatusFilter == 1) {
+                if ( urllinkStatus == 2 || urllinkStatus == 0 || (urllinkStatus >= 100 && urllinkStatus < 400) || (urllinkStatus >= 500 && urllinkStatus < 600)) {
+                    return true;
+                }
+            } else if (linkStatusFilter == 0) {
+                if ( urllinkStatus == 1  || urllinkStatus == 404 || urllinkStatus == 410) {
+                    return true;
+                }
+            } else if (linkStatusFilter == 2) {
+                if ( urllinkStatus == 3 ) {
+                    return true;
+                }
+            } else if (linkStatusFilter == 3) {
+                if ((urllinkStatus >= 400 && urllinkStatus < 500) && urllinkStatus != 404 && urllinkStatus != 410) {
+                    return true;
+                }
+            }
+            return validLink;
+        };
+
+        for (mmHitKey in mmHits) {
+            var mmHit = mmHits[mmHitKey];
+            if (
+                checkLinkStatus(mmHit.linkStatus,linkFilter) &&
+                (statusFilter == 'all' || statusFilter == mmHit.determination)
+            ) {
+                if (checkLinkStatus(mmHit.linkStatus,linkFilter)) {
+                    var title = "<a href='" + mmHit.url +"' target=\"_blank\" class=\"media-monitor-title\">" + mmHit.title + "</a>";
+                    var relevance = "<span class=\"media-monitor-span\">" + mmHit.relevance + "%</span>";
+                    var pubDatestr = "NA";
+                    if (mmHit.publicationDate != "NA") {
+                        pubDatestr = formatDateToDDMMYYYY(mmHit.publicationDate);
+                    }
+                    var pubDate = "<span class=\"media-monitor-span\">" + pubDatestr + "</span>";
+                    var linkStatus, status = "", validLink = 0;
+
+                    var statusStr = imageUrl = "";
+                    if (mmHit.determination == "falsePositive") {
+                        statusStr = "False positive";
+                        imageUrl = "<?php echo $sitepath; ?>/aws/images/falsepositive.png";
+                    } else if (mmHit.determination == "match") {
+                        statusStr = "True Match";
+                        imageUrl = "<?php echo $sitepath; ?>/aws/images/truepossitive.png";
+                    } else if (mmHit.determination == "undetermined") {
+                        statusStr = "Undetermined";
+                        imageUrl = "<?php echo $sitepath; ?>/aws/images/undetermined.png";
+                    }
+                    status = "<div class=\"true-false-td\"><image class=\"true-false-img\" src=\"" + imageUrl + "\"><span class=\"media-monitor-span media-monitor-span-width\">" + statusStr + "</span></div>";
+                    idType = (mmHit.idType.toLowerCase() == 'person') ? 'Person' : 'Entity';
+                    if (mmHit.reviewed) {
+                        typeOfFunc = "onclick=\"gdcdata.opRequest('load-mm-detail', '" + mmHit.source_recid + "', '"
+                                + encodeURIComponent(mmHit.reason).replace(/'/g, "\\'") + "', '" + mmHit.reasonID + "', '" + idType + "', '"
+                                + mmHit.categoryID + "')\"";
+                        action = "<div class=\"media-monitor-detblank\" " + typeOfFunc + "><image class=\"media-monitor-det\" src=\"<?php echo $sitepath; ?>/aws/images/edit-note.png\"></div>";
+                    } else {
+                        typeOfFunc = "onclick=\"gdcdata.opRequest('load-mm-detail','" + mmHit.source_recid + "')\"";
+                        action = "<div class=\"media-monitor-detfill gdc-mm-res-ttl\" " + typeOfFunc + "><image class=\"media-monitor-det\" src=\"<?php echo $sitepath; ?>/aws/images/edit.png\"></div>";
+                    }
+
+                    var loadData = { title: title, relevance: relevance, pubDate: pubDate, status: status, action: action };
+                    <?php if ($bulkAdjudEnabled) { ?>
+                        var ckbox = "<input class=\"selectRow\" onClick=\"gdcdata.bulkchecked()\" name=\"bulkids[]\" value=\"" + mmHit.source_recid + "\" type=\"checkbox\">";
+                        loadData.ckbox = ckbox;
+                    <?php } ?>
+                    <?php if ($aiSummarisationEnabled) { ?>
+                        if (
+                            mmHit.linkStatus == 2 ||
+                            mmHit.linkStatus == 0 ||
+                            (mmHit.linkStatus >= 500 && mmHit.linkStatus < 600) ||
+                            (mmHit.linkStatus >= 100 && mmHit.linkStatus < 200) ||
+                            (mmHit.linkStatus >= 200 && mmHit.linkStatus < 300) ||
+                            (mmHit.linkStatus >= 300 && mmHit.linkStatus < 400)
+                        ) {
+                            validLink = 1;
+                        } else if (mmHit.linkStatus == 3) {
+                            validLink = 2;
+                        } else if ((mmHit.linkStatus >= 400 && mmHit.linkStatus < 500 ) && mmHit.linkStatus != 404 && mmHit.linkStatus != 410) {
+                            validLink = 3;
+                        }
+                        linkStatus = "<span class=\"media-monitor-span cursor-help\" title=\"Links that have expired, failed to load, or timed out, or are broken because the webpage wasn’t resolved or has expired\">Invalid</span>";
+                        if (validLink == 1) {
+                            linkStatus = "<span class=\"media-monitor-span cursor-help\" title=\"Links that are working as expected\">Valid</span>";
+                        } else if (validLink == 2) {
+                            linkStatus = "<span class=\"media-monitor-span cursor-help\" title=\"Links that are being validated by Third Party Manager. To be marked Valid or Invalid depending on the outcome.\">Validation in progress</span>";
+                        } else if (validLink == 3 ) {
+                            linkStatus = "<span class=\"media-monitor-span cursor-help\" title=\"These are links that weren’t successfully resolved by Third Party Manager’s proprietary validation method, because the cloud service provider or the web service had security measures that prevent either a user agent, or a proxy configuration, or multiple repetitive requests from accessing the original resource, or when web scraping is not allowed. However, as a human user, when you attempt opening the original article from the URL directly from your browser, it may be accessible.\">Inconclusive</span>";
+                        }
+                        loadData.linkStatus = linkStatus;
+                        var aiSummary = "";
+                        if (validLink != 0) {
+                        let titleName = encodeURIComponent(mmHit.title).replace(/'/g, "\\'");
+                        aiSummary = "<div class=\"ai-summary-imgcont\"><div onclick=\"gdcdata.aiSummaryResult('" + mmHit.term + "','" + titleName + "','" + mmHit.url + "','" + mmHit.publicationDate + "'," + mmHit.source_recid + ", '" + idType  + "', 'summaryPopUp')\" class=\"ai-summary-imgbody\"><image class=\"ai-summary-img\" src=\"<?php echo $sitepath; ?>/aws/images/summary.png\"></div></div>";
+                        }
+                        loadData.aiSummary = aiSummary;
+                    <?php } ?>
+                    preloadedData.push(loadData);
+                }
+            }
+        }
+        var myColumnDefs = [];
+        <?php if ($bulkAdjudEnabled) { ?>
+            myColumnDefs.push({ key: "ckbox", label: "", sortable: false, width: 50 });
+        <?php } ?>
+        myColumnDefs.push({ key: "title", label: "Title", className: 'fixedLength', sortable: true, width: 250 });
+        myColumnDefs.push({ key: "relevance", label: "Relevance", sortable: true, width: 100 });
+        myColumnDefs.push({ key: "pubDate", label: "Publication Date", sortable: true, width: 100 });
+        <?php if ($aiSummarisationEnabled) { ?>
+            myColumnDefs.push({ key: "linkStatus", label: "Link Status", sortable: true, width: 100 });
+            myColumnDefs.push({ key: "aiSummary", label: "AI Summary", sortable: true, width: 100 });
+        <?php } ?>
+        myColumnDefs.push({ key: "status", label: "Status", sortable: true, width: 100 });
+        myColumnDefs.push({ key: "action", label: actionLabel, sortable: true, width: 100 });
+        var myDataSource = new YAHOO.util.DataSource(preloadedData);
+        myDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+        myDataSource.responseSchema = {
+            fields: ["ckbox", "title", "relevance", "pubDate", "linkStatus", "aiSummary", "status", "action"]
+        };
+    }
+    var myConfigs = {
+        draggableColumns: false,
+        paginator: new YAHOO.widget.Paginator({
+            alwaysVisible: true,
+            totalRecords: preloadedData.length,
+            rowsPerPage: preloadedData.length,
+            template: "{TotalRows} <span class=\"yui-pg-records\">Records</span> "
+                    + "<span class=\"yui-pg-extra\">Page</span> {CurrentPageReport} "
+                    + "{FirstPageLink} {PreviousPageLink} "
+                    + "<span class=\"yui-pg-extra2\">Jump to</span> "
+                    + "{JumpToPageDropdown} {NextPageLink} {LastPageLink} "
+                    + "{RowsPerPageDropdown} <span class=\"yui-pg-extra\">"
+                    + "Records per Page</span>",
+            rowsPerPageOptions: [
+                { text: "All", value: preloadedData.length },
+                { text: "10", value: 10 },
+                { text: "25", value: 25 },
+                { text: "50", value: 50 },
+                { text: "100", value: 100 }
+            ],
+            containers: [ "ai-summary-pagination-bottom", "ai-summary-pagination-top" ]
+        }),
+        dynamicData: false // Set to false since data is preloaded
+    };
+    var myDataTable = new YAHOO.widget.DataTable("ai-summary-table", myColumnDefs, myDataSource, myConfigs);
+    gdcdata.currentResultsVal = summaryResults;
+    gdcdata.bulkchecked();
+    $(".yui-dt-sortable").on('click', function() {
+        setTimeout(function() {
+            $("td.yui-dt-sortable").removeClass("yui-dt-desc");
+            $("td.yui-dt-sortable").removeClass("yui-dt-asc");
+        }, 10);
+    });
+    if(preloadedData.length == 0){
+        $("#ai-summary-table").html(`<div class="no-rec-found"><div class="no-rec-found-container"><div class="no-rec-found-wrapper"><img src="<?php echo $sitepath; ?>/aws/images/tri-danger.png" height="18" width="20"><p>There are no hits matching the filters you've selected.</p></div></div></div>`);
+        setTimeout(function() {
+            $(".yui-pg-current").html("(0 of 0)");
+        }, 10);
+    }
+};
+gdcdata.changeTabFilter = function(gdctab)
+{
+    const source = $(gdctab).data("source");
+    if (source == "mm"){
+        $("#gdc-mm-filter-tab .gdc-mm-tab[data-source='mm']").addClass("active");
+        $("#gdc-mm-filter-tab .gdc-mm-tab[data-source='gdc']").removeClass("active");
+        $(".mm-summary-filter").css("display", "");
+        $(".gdc-summary-filter").css("display", "none");
+    } else {
+        $("#gdc-mm-filter-tab .gdc-mm-tab[data-source='gdc']").addClass("active");
+        $("#gdc-mm-filter-tab .gdc-mm-tab[data-source='mm']").removeClass("active");
+        $(".mm-summary-filter").css("display", "none");
+        $(".gdc-summary-filter").css("display", "");
+    }
+    $("#gdc-source-filter").val("all");
+    $("#gdc-mm-status-filter").val("all");
+    $("#gdc-mm-remediated-filter").val("all");
+    $("#mm-summary-link-filter").val("all");
+    gdcdata.changeScreenResult();
+};
+function formatDateToDDMMYYYY(dateString) {
+    var date = new Date(dateString);
+    var day = date.getDate().toString().padStart(2, '0');
+    var month = (date.getMonth() + 1).toString().padStart(2, '0'); // Months are zero-based
+    var year = date.getFullYear();
+    return day + '/' + month + '/' + year;
+}
+gdcdata.aiSummaryResult = function(source, mmTitle, mmURL, mmPubDate, mmSourceRecid, mmSource, mod_name)
+{
+    getArticleSummary(mmURL, source);
+    var modal = document.getElementById(mod_name);
+    let articleOriginalLink = "<a target='_blank' href='"+mmURL+"'>Original Article</a>";
+    // Add open class to make visible and trigger animation
+    modal.classList.add('open');
+    $("body").css('overflow', "hidden");
+    document.getElementById('summaryKeyWordsAI').innerHTML = '';
+    document.getElementById('mmSummarySubject').innerHTML = source;
+    document.getElementById('mmArticleNameSummaryPopup').innerHTML = decodeURIComponent(mmTitle);
+    document.getElementById('mmArticleOriginalLink').innerHTML = articleOriginalLink;
+
+  document.getElementById("modalBackground").style = "display:block";
+};
+
+gdcdata.buildAdjudicationPopUpContent = function (res){
+    gdcdata.setDropdownCategories(res.AdjudicationCategories);
+    //reasosns build the dropdown
+    // let resonsAdjudicationOptions = '';
+    // for(list in res.AdjudicationReasons.match){
+    //     console.log(list['noteText']);
+    //     resonsAdjudicationOptions+= "<option val='"+list.noteText+"'>"+list.listText+"</option>"
+    // }
+}
+    gdcdata.opRequest = function(op, arg1, arg2, arg3, arg4, arg5)
+    {
+        if (!gdcdata.opActive) return false;
+        var postData = "op=" + op
+            + '&gdcReviewAuth=' + gdcdata.auth;
+        switch (op) {
+        case 'prep-name':
+            postData += '&fi=' + encodeURIComponent(arg1)
+                + '&la=' + encodeURIComponent(arg2)
+                + '&fu=' + encodeURIComponent(arg3)
+                + '&et=' + encodeURIComponent(arg4);
+            break;
+        <?php if ($bulkAdjudEnabled) { ?>
+        case 'bulk-reasons':
+            postData += '&adjMode=' + arg1;
+            break;
+        case 'mm-bulk-update':
+        case 'bulk-update':
+            postData += '&bulkids=' + arg1 + '&bulkvals=' + arg2 + '&bulkmatch=' + arg3 +
+                '&bulkreason=' + encodeURIComponent(arg4) + '&bulkreasonID=' + arg5;
+            break;
+
+    <?php
+}
+?>
+    case 'gdc-run-monitor':
+    case 'gdc-run':
+    case 'mm-review-log':
+        var c = Lang.JSON.stringify(gdcdata.nameConfig);
+        postData += '&cfg='
+            + encodeURIComponent(Util.encode64(c));
+        postData += '&source_recid=' + arg1
+            + '&tpID=' + arg2;
+        break;
+    case 'review-log':
+        break;
+
+    case 'update-summary':
+        break;
+
+    case 'mm-save-eval':
+    case 'save-eval':
+        gdcdata.adjudicationClose();
+        postData += '&flag=' + arg1;
+        postData += '&reason=' + encodeURIComponent(arg2);
+        postData += '&reasonID=' +arg3;
+        if (op == 'mm-save-eval') {
+            postData += '&source_recid=' + arg4;
+        }
+        break;
+
+    case 'load-detail':
+        postData += '&tbl=' + arg1
+            + '&ref=' + arg2
+            + '&reason=' + encodeURIComponent(arg3)
+            + '&reasonID=' + arg4
+            + '&type=' + arg5;
+        break;
+
+    case 'load-mm-detail':
+        postData += '&source_recid=' + arg1
+            + '&reason=' + encodeURIComponent(arg2)
+            + '&reasonID=' + arg3
+            + '&type=' + arg4;
+        break;
+
+    case 'alter-show':
+        postData += '&fp=' + arg1 + '&uc=' + arg2;
+        break;
+
+    case 'mm-load-result':
+    case 'load-result':
+        var i, el, els = Dom.getElementsBy(function(e) {
+            var id = Dom.getAttribute(e, 'id');
+            var res = (id != null && id != undefined && id.match(/^trRes\d+$/));
+            return res; }, 'tr', 'subject-list'
+        );
+        for (i in els) {
+            el = els[i];
+            if (el.id == 'trRes' + arg1) {
+                Dom.addClass(el, 'hi');
+            } else {
+                Dom.removeClass(el, 'hi');
+            }
+        }
+        postData += '&r=' + arg1
+            + '&s=' + arg2;
+        Dom.removeClass('review-symbols', 'disp-none');
+        if (gdcdata.currentIndividual != arg1) {
+            gdcdata.currentResultsVal = null;
+        }
+        gdcdata.currentIndividual = arg1;
+        gdcdata.setBulkState(true);
+        break;
+
+    case 'load-help':
+        postData += '&id=' + arg1;
+        break;
+<?php
+if ($session->secure_value('accessLevel') == SUPER_ADMIN) {
+    ?>
+    case 'manual-run':
+        break;
+    <?php
+} ?>
+    case 'listDesc':
+        postData += '&id=' + arg1;
+        break;
+    case 'fetch-ent':
+        postData += '&list=' + arg1;
+        postData += '&id=' + arg2;
+        postData += '&ver=' + encodeURIComponent(arg3);
+        break;
+    default:
+        alert('operation not configured');
+        return false;
+    }
+
+    var handleOperation = function(o) {
+        var res = false;
+        var op = o.argument[0];
+        try {
+            res = Lang.JSON.parse(o.responseText);
+        } catch (ex) {
+<?php
+if (SECURIMATE_ENV == 'Development' || $session->secure_value('accessLevel') == SUPER_ADMIN) {
+    ?>
+            alert('responseText: ' + o.responseText);
+    <?php
+} else {
+    ?>
+            alert('An error occurred while communicating with the server');
+    <?php
+} ?>
+            return;
+        }
+        gdcdata.auth = res.gdcReviewAuth;
+        switch (op) {
+        case 'prep-name':
+            if (res.Result == 1) {
+                YAHOO.gdccfg.updateConfig(res.First, res.Last, res.Full, res.eType);
+            } else if (res.Result != 2) {
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+            }
+            break;
+
+        case 'gdc-run-monitor':
+            if (res.Reload != 0) {
+                gdcdata.loadScreening(res.Reload);
+            } else {
+                gdcdata.opRequest('gdc-run-monitor');
+            }
+            break;
+
+        case 'gdc-run':
+            if (res.Result == 1) {
+                gdcdata.loadScreening(res.ScreeningID);
+            } else if (res.Result != 2) {
+                gdcdata.redirectToReviewTab = true;
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+            }
+            break;
+
+        case 'mm-review-log':
+        case 'review-log':
+            if (!gdcdata.reviewLogPnl.rendered) {
+                //gdcdata.reviewLogPnl.render(document.body);
+                //gdcdata.reviewLogPnl.rendered = true;
+            }
+            Dom.get('gdc-review-log-content').innerHTML = res.HTML;
+            //gdcdata.reviewLogPnl.center();
+            //gdcdata.reviewLogPnl.show();
+            //Audit log
+            var acc = document.getElementsByClassName("accordion");
+            var i;
+
+            for (i = 0; i < acc.length; i++) {
+            acc[i].addEventListener("click", function() {
+                this.classList.toggle("active");
+                var panel = this.nextElementSibling;
+                if (panel.style.maxHeight) {
+                panel.style.maxHeight = null;
+                } else {
+                panel.style.maxHeight = panel.scrollHeight + "px";
+                }
+            });
+            }
+            break;
+
+        case 'bulk-reasons':
+        case 'update-summary':
+            if (res.ReviewExplain && res.ReviewExplain.length > 0) {
+                Dom.get('gdc-review-status').innerHTML = res.ReviewExplain;
+            }
+            if (res.SumsCnt > 0) {
+                var ref, id, vals;
+                for (ref in res.Sums) {
+                    id = ref.substr(1);
+                    if (document.getElementById('sl-rvw' + id)) {
+                        vals = res.Sums[ref];
+                        Dom.get('sl-rvw' + id).innerHTML = vals['rvw'];
+                        Dom.get('sl-tm' + id).innerHTML = vals['tm'];
+                        Dom.get('sl-fp' + id).innerHTML = vals['fp'];
+                    }
+                }
+            }
+            var attn = '';
+            if (0 && res.IsCurrent) {
+                if (res.Attn > 0) {
+                    attn = '(' + res.Attn + ')';
+                }
+                parent.window.YAHOO.util.Dom.get('gdc-attn').innerHTML = attn;
+                if (res.Attn > 0) {
+                    parent.window.YAHOO.util.Dom.removeClass('gdc-attn', 'v-hidden');
+                } else {
+                    parent.window.YAHOO.util.Dom.addClass('gdc-attn', 'v-hidden');
+                }
+            }
+
+            <?php // bulk element assignment ?>
+            gdcdata.gdcEvalOptionsBulk   = document.getElementById('gdc-eval-options-bulk');
+            gdcdata.gdcRsnsContainerBulk = document.getElementById('gdc-reasons-container-bulk');
+            gdcdata.gdcRsnsDropdownBulk  = document.getElementById('gdc-reason-dropdown-bulk');
+            gdcdata.gdcRsnsNoteBulk      = document.getElementById('gdc-note-bulk');
+            gdcdata.gdcRsnIDBulk         = document.getElementById('gdc-reasonid-bulk');
+
+            if (gdcdata.gdcEvalOptionsBulk !== null && gdcdata.gdcEvalOptionsBulk !== undefined) {
+                gdcdata.gdcEvalOptionsBulk.onchange = function() {
+                    gdcdata.setContainerState(gdcdata.gdcRsnsContainerBulk);
+                    gdcdata.setDropdownReasons(gdcdata.gdcRsnsDropdownBulk);
+                    gdcdata.setNoteState(gdcdata.gdcRsnsDropdownBulk, gdcdata.gdcRsnsNoteBulk);
+                };
+            }
+
+            if (gdcdata.gdcRsnsDropdownBulk !== null && gdcdata.gdcRsnsDropdownBulk !== undefined) {
+                gdcdata.gdcRsnsDropdownBulk.onchange = function() {
+                    gdcdata.setNoteState(gdcdata.gdcRsnsDropdownBulk, gdcdata.gdcRsnsNoteBulk);
+                };
+            }
+
+            if (gdcdata.gdcRsnsNoteBulk !== null && gdcdata.gdcRsnsNoteBulk !== undefined) {
+                Event.addListener('gdc-note-bulk', 'paste', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note-bulk', 'keydown', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note-bulk', 'keyup', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note-bulk', 'change', gdcdata.limitNoteLength);
+            }
+
+            <?php // If one of the gdc boxes is checked disable the mm check boxes and vice versa ?>
+            gdcdata.modifyBulkCheckBoxes = function(mode)
+            {
+                var gdcChk   = document.getElementsByClassName('gdc-res-chk');
+                var mmChk    = document.getElementsByClassName('gdc-mm-res-chk');
+                var gdcCount = 0;
+                var mmCount  = 0;
+
+                var cBoxes = (mode == 'gdc') ? gdcChk   : mmChk;
+                var oBoxes = (mode == 'gdc') ? mmChk    : gdcChk;
+                var cCount = (mode == 'gdc') ? gdcCount : mmCount;
+
+                [].forEach.call(cBoxes, function (el) {
+                    if (el.checked) {
+                        cCount++;
+                    }
+                });
+                if (cCount > 0 && oBoxes) {
+                    [].forEach.call(oBoxes, function (el) {
+                        el.setAttribute("disabled", "true");
+                    });
+                    gdcdata.bulkAdjTypeCurrent = mode;
+                } else if (cCount == 0 && oBoxes) {
+                    [].forEach.call(oBoxes, function (el) {
+                        el.removeAttribute("disabled");
+                    });
+                }
+            };
+
+            <?php // Repositions the bulk adjudication UI ?>
+            gdcdata.positionBulkUI = function(details)
+            {
+                <?php // effectively resets the bulk UI ?>
+                var container = document.getElementById('gdc-reasons-container-bulk');
+                var dropdown  = document.getElementById('gdc-reason-dropdown-bulk');
+                gdcdata.setInitialState(container, dropdown);
+
+                var bulkUI    = document.getElementById('bulk-adjudication-container');
+                var gdcAnchor = document.getElementById('gdc-container-anchor');
+                var mmAnchor  = document.getElementById('mm-container-anchor');
+
+                if (bulkUI !== null && bulkUI !== undefined) {
+                    var ourNode = bulkUI.cloneNode(true);
+                } else {
+                    return;
+                }
+
+                if (gdcdata.bulkAdjTypeCurrent == 'mm' || details.mmChecked.total > 0) {
+                    bulkUI.parentNode.removeChild(bulkUI);
+                    (details.mmChecked.top > details.mmChecked.bottom) ?
+                        gdcAnchor.appendChild(ourNode) :
+                        mmAnchor.appendChild(ourNode);
+                } else if (gdcdata.bulkAdjTypeCurrent == 'gdc' || details.gdcChecked > 0) {
+                    bulkUI.parentNode.removeChild(bulkUI);
+                    gdcAnchor.appendChild(ourNode);
+                } else {
+                    bulkUI.parentNode.removeChild(bulkUI);
+                    gdcAnchor.appendChild(ourNode);
+                }
+            };
+
+            <?php // Sets the bulk adjudication type to either gdc or mm ?>
+            gdcdata.updateBulkUI = function()
+            {
+                <?php // get checkbox details ?>
+                var details = gdcdata.getBulkResultDetails();
+
+                <?php // handle the disabling of checkboxes ?>
+                if (details.gdcChecked > 0) {
+                    gdcdata.modifyBulkCheckBoxes('gdc');
+                } else if (details.mmChecked.total > 0) {
+                    gdcdata.modifyBulkCheckBoxes('mm');
+                } else {
+                    gdcdata.modifyBulkCheckBoxes(gdcdata.bulkAdjTypeCurrent);
+                }
+
+                <?php // if this is the first pass or if the bulkAdjType isn't set select the type for us ?>
+                if (gdcdata.bulkAdjTypeCurrent == '' && details.gdcCount > 0) {
+                    gdcdata.bulkAdjTypeCurrent = 'gdc';
+                } else if (gdcdata.bulkAdjTypeCurrent == '' && (details.mmCount.top > 0
+                    || details.mmCount.bottom > 0)) {
+                    gdcdata.bulkAdjTypeCurrent = 'mm';
+                }
+
+                <?php // handle repositioning the bulk adjudication UI portion ?>
+                if (gdcdata.bulkAdjType != gdcdata.bulkAdjTypeCurrent) {
+                    gdcdata.positionBulkUI(details);
+                    <?php // set up all the reason drop downs once again now that the UI has shifted ?>
+                    gdcdata.opRequest('bulk-reasons', gdcdata.bulkAdjTypeCurrent);
+                }
+
+                gdcdata.bulkAdjType = gdcdata.bulkAdjTypeCurrent;
+            };
+
+            gdcdata.loadAdjudicationReasons(
+                res.Record,
+                res.AdjudicationReasons.match,
+                res.AdjudicationReasons.falsePositive
+            );
+
+            gdcdata.updateBulkUI();
+            break;
+
+        <?php // Update the screening list ?>
+        case 'mm-bulk-update':
+        case 'bulk-update':
+        case 'mm-save-eval':
+        case 'save-eval':
+            if (res.ResultID != 0) {
+                gdcdata.opRequest('load-result', res.ResultID, res.ScreeningID);
+            }
+            break;
+
+        case 'load-mm-detail':
+        case 'load-detail':
+            resetReviewLog();
+            if (res.Result == 0) {
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+                break;
+            }
+            if (op == 'load-mm-detail') {
+                $('.adjudication-header').css('display', 'block');
+                $('#mmArticleName').html(res.Record.Name);
+                $('#publicationSummary').html(res.Record.Summary)
+                $('#mmArticleRelevance').html(res.Record.Relevancy);
+                $('#mmArticlePublished').html(res.Record.PublishedDate);
+                $('#gdc-detail').css('display','none');
+            } else {
+                $('.adjudication-header').css('display', 'none');
+                $('#gdc-detail').css('display','block');
+            }
+            if (res.Mode == 'single') {
+                gdcdata.showSingleRecord(res.Record, res.Flag, res.IsCurrent);
+                gdcdata.setBulkState(false);
+                gdcdata.loadAdjudicationReasons(
+                    res.Record,
+                    res.AdjudicationReasons.match,
+                    res.AdjudicationReasons.falsePositive,
+                    res.AdjudicationReasons.current
+                );
+                gdcdata.setInitialState(gdcdata.gdcRsnsContainer, gdcdata.gdcRsnsDropdown);
+            } else if (res.Mode == 'dual') {
+                gdcdata.setBulkState(false);
+                gdcdata.showDualRecords(res.Record, res.PrevRecord, res.Flag, res.IsCurrent);
+                gdcdata.loadAdjudicationReasons(
+                    res.Record,
+                    res.AdjudicationReasons.match,
+                    res.AdjudicationReasons.falsePositive,
+                    res.AdjudicationReasons.current
+                );
+                gdcdata.setInitialState(gdcdata.gdcRsnsContainer, gdcdata.gdcRsnsDropdown);
+            }
+            if (gdcdata.gdcRsnsNote !== null) {
+                Event.addListener('gdc-note', 'paste', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note', 'keydown', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note', 'keyup', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note', 'change', gdcdata.limitNoteLength);
+            }
+            $('#gdc-detail-view').addClass('open');
+            $("body").css('overflow', "hidden");
+            $(".audit-log-img").addClass("active");
+            break;
+
+        case 'alter-show':
+        case 'mm-load-result':
+        case 'load-result':
+            if (res.Result == 1) {
+                gdcdata.data = res;
+                var gdcData = res;
+                var gdcHitsCnt = mmHitsCnt = gdcUndetHitsCnt = mmUndetHitsCnt = 0;
+                var filterRecords = {};
+                filterRecords.gdcHitsDataSourceFilter = [];
+                filterRecords.mmHitsLinkStatusFilter = [];
+                filterRecords.gdcMMStatusFilter = {};
+                filterRecords.gdcMMStatusFilter.mm = [];
+                filterRecords.gdcMMStatusFilter.gdc = [];
+                filterRecords.gdcMMRemedFilter = {};
+                filterRecords.gdcMMRemedFilter.mm = [];
+                filterRecords.gdcMMRemedFilter.gdc = [];
+                for (tbl in gdcData.TableTrans) {
+                    if (gdcData.Hits[tbl] == undefined || gdcData.Hits[tbl].length == 0) {
+                        continue;
+                    }
+                    gdcHitsCnt = gdcHitsCnt + gdcData.Hits[tbl].length;
+                    for (i in gdcData.Hits[tbl]) {
+                        var value = gdcData.Hits[tbl][i];
+                        if (value.flag == 'undetermined') {
+                            gdcUndetHitsCnt++;
+                        }
+                        if (filterRecords.gdcHitsDataSourceFilter.includes(tbl) == false) {
+                            filterRecords.gdcHitsDataSourceFilter.push(tbl);
+                        }
+                        if (filterRecords.gdcMMStatusFilter.gdc.includes(value.flag) == false) {
+                            filterRecords.gdcMMStatusFilter.gdc.push(value.flag);
+                        }
+                        value.remediation = (value.remediation == "1") ? "1" : "0";
+                        if (filterRecords.gdcMMRemedFilter.gdc.includes(value.remediation) == false) {
+                            filterRecords.gdcMMRemedFilter.gdc.push(value.remediation);
+                        }
+                    }
+                }
+
+                <?php
+                // if the tenant has media monitor count the media monitor hits
+                if ($mmEnabled) {
+                ?>
+
+                    if (gdcData.mmResults == undefined) {
+                        gdcData.mmResults = {};
+                    }
+                    var mmHits = Object.values(gdcData.mmResults);
+                    for (review in gdcData.mmReviews) {
+                        mmHits.push(gdcData.mmReviews[review]);
+                    }
+                    mmHitsCnt = mmHits.length;
+                    for (mmHitKey in mmHits) {
+                        var mmHit = mmHits[mmHitKey];
+                        if (mmHit.determination == "undetermined") {
+                            mmUndetHitsCnt++;
+                        }
+                        if (mmHit.linkStatus == 2 ||
+                            mmHit.linkStatus == 0 ||
+                            (mmHit.linkStatus >= 500 && mmHit.linkStatus < 600) ||
+                            (mmHit.linkStatus >= 100 && mmHit.linkStatus < 200) ||
+                            (mmHit.linkStatus >= 200 && mmHit.linkStatus < 300) ||
+                            (mmHit.linkStatus >= 300 && mmHit.linkStatus < 400)) {
+                            if (filterRecords["mmHitsLinkStatusFilter"].includes(1) == false) {
+                                filterRecords["mmHitsLinkStatusFilter"].push(1)
+                            }
+                        } else if (mmHit.linkStatus == 3) {
+                            if (filterRecords["mmHitsLinkStatusFilter"].includes(2) == false) {
+                                filterRecords["mmHitsLinkStatusFilter"].push(2)
+                            }
+                        } else if (mmHit.linkStatus == 1 || mmHit.linkStatus == 404 || mmHit.linkStatus ==410) {
+                            if (filterRecords["mmHitsLinkStatusFilter"].includes(0) == false) {
+                                filterRecords["mmHitsLinkStatusFilter"].push(0)
+                            }
+                        } else if ((mmHit.linkStatus >= 400 && mmHit.linkStatus < 500) && mmHit.linkStatus != 404 && mmHit.linkStatus !=410) {
+                            if (filterRecords["mmHitsLinkStatusFilter"].includes(3) == false) {
+                                filterRecords["mmHitsLinkStatusFilter"].push(3)
+                            }
+                        }
+                        if (filterRecords.gdcMMStatusFilter.mm.includes(mmHit.determination) == false) {
+                            filterRecords.gdcMMStatusFilter.mm.push(mmHit.determination);
+                        }
+                        mmHit.remediation = (mmHit.remediation == "1") ? "1" : "0";
+                        if (filterRecords.gdcMMRemedFilter.mm.includes(mmHit.remediation) == false) {
+                            filterRecords.gdcMMRemedFilter.mm.push(mmHit.remediation);
+                        }
+                    }
+                <?php } ?>
+                gdcdata.filterRecords = filterRecords;
+                $(".gdc-undetermined-count").html(gdcUndetHitsCnt);
+                $(".mm-undetermined-count").html(mmUndetHitsCnt);
+                gdcdata.changeScreenResult();
+                Dom.get('overall-ai-summary').style.display = '';
+                gdcdata.opRequest('update-summary');
+            } else {
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+            }
+            break;
+
+        case 'load-help':
+            if (res.Result == 1)
+            {
+                iHelp.loaded.push(o.argument[1]);
+                iHelp.addData(res.HelpObj);
+                iHelp.show(o.argument[1], o.argument[2]);
+            }
+            break;
+
+        case 'listDesc':
+            gdcdata.loadedDesc[gdcdata.loadedDesc.length] = res.listId;
+            iHelp.data[iHelp.data.length] = res.HelpObj;
+            iHelp.toggle(res.listId, o.argument[2]);
+            break;
+
+        case 'fetch-ent':
+            var txt = '';
+            if (res.Result == 1)
+            {
+                txt = '<table bgcolor="#808080" cellpadding="0" '
+                    + 'cellspacing="0"><tr><td><table cellpadding="2" cellspacing="1">';
+                txt += '<tr bgcolor="#d8d8d8">';
+                txt += '<th class="no-wrap">Field Name</th>';
+                txt += '<th class="no-wrap">Field Value</th>';
+                txt += '</tr>\n';
+                var f, v, fld, val;
+                for (f in res.Entity)
+                {
+                    v = res.Entity[f];
+                    if (v == null)
+                        continue;
+                    if (f.substr(0,4) == 'sdf_')
+                    {
+                        fld = f.substr(4);
+                        if (fld == 'DirectID') {
+                            v = '<a href="' + v + '" target="_blank" '
+                                + 'title="More information">World Compliance Link</a>';
+                        }
+                    }
+                    else {
+                        fld = f;
+                    }
+                    txt += '<tr>';
+                    txt += '<td bgcolor="#f0f0f0" class="no-wrap">' + fld + '</td>';
+                    txt += '<td bgcolor="#ffffff">' + v + '</td>';
+                    txt += '</tr>\n';
+                }
+                txt += '</table></td></tr></table>';
+            } else {
+                txt = '<b>' + res.ErrTitle + '</b>\n';
+                txt += '<div class="marg-top1e">' + res.ErrMessage + '</div>';
+            }
+            Dom.get('ent-detail').innerHTML = txt;
+            break;
+
+        case 'ws-request':
+            var txt, ln, i, mi, ei, m, e, bg, rowspan, skip, rcnt = 0;
+            if (res.Result == 1) {
+                txt = '<b>Webservice Result</b>\n';
+                txt += '<div class="marg-top1e" style="margin-left:.5em"><table '
+                    + 'cellpadding="2" cellspacing="0">';
+                txt += '<tr><td class="no-wrap">Search Text:</td><td>'
+                    + res.SearchText + '</td></tr>\n';
+                txt += '<tr><td class="no-wrap">Total Matches:</td><td>'
+                    + res.Parsed.Results.TM + '</td></tr>\n';
+                txt += '<tr><td class="no-wrap">Total Entities:</td><td>'
+                    + res.Parsed.Results.TE + '</td></tr>\n';
+                txt += '<tr><td class="no-wrap">Serial Length:</td><td>'
+                    + res.SerialLen + '</td></tr>\n';
+                txt += '</table></div>';
+            } else {
+                txt = '<b>' + res.ErrTitle + '</b>\n';
+                txt += '<div class="marg-top1e">' + res.ErrMessage + '</div>';
+            }
+            Dom.get('result-sum').innerHTML = txt;
+
+            if (res.Result == 1 && res.Parsed.Results.TM > 0) {
+                txt = '<table cellpacing="0" cellpadding="0"><tr><td valign="top">'
+                    + '<div style="width:430px"><table bgcolor="#808080" cellpadding="0" '
+                    + 'cellspacing="0"><tr><td><table cellpadding="2" cellspacing="1">';
+                txt += '<tr bgcolor="#d8d8d8">';
+                txt += '<th class="ta-cent">Source</th>';
+                txt += '<th class="ta-cent no-wrap">Matching Text</th>';
+                txt += '<th class="ta-cent no-wrap">List ID</th>';
+                txt += '<th class="ta-cent no-wrap">Entity ID</th>';
+                txt += '<th class="ta-cent">Name</th>';
+                txt += '</tr>\n';
+                rcnt = 0;
+                for (mi in res.Parsed.M)
+                {
+                    m = res.Parsed.M[mi];
+                    rowspan = m.E.length;
+                    skip = false;
+                    for (ei in m.E)
+                    {
+                        bg = (rcnt & 1) ? '#f0f0f0': '#ffffff';
+                        e = m.E[ei];
+                        txt += '<tr bgcolor="' + bg + '">';
+                        if (rowspan > 1)
+                        {
+                            if (!skip)
+                            {
+                                txt += '<td valign="top" rowspan="' + rowspan
+                                    + '" class="ta-cent">' + m.MT + '</td>';
+                                txt += '<td valign="top" rowspan="' + rowspan
+                                    + '" >' + m.SD + '</td>';
+                                skip = true;
+                            }
+                        }
+                        else
+                        {
+                            txt += '<td class="ta-cent">' + m.MT + '</td>';
+                            txt += '<td>' + m.SD + '</td>';
+                        }
+                        txt += '<td class="ta-cent"><a href="javascript:void(0)" '
+                            + 'onclick="gdcdata.listDesc(this,' + e.lid + ')" '
+                            + 'title="List Description">' + e.lid + '</a></td>';
+                        txt += '<td><a href="javascript:void(0)" '
+                            + 'onclick="gdcdata.opRequest(\'fetch-ent\', \''
+                            + m.MT + '\', \'' + e.id + '\', \'' + e.ver + '\')" '
+                            + 'title="Click to view details">' + e.id + '</a></td>';
+                        if (res.Depth == 'full')
+                            txt += '<td>' + e.name + '</td>';
+                        else
+                            txt += '<td>' +  res.Names[e.id + '_' + e.ver] + '</td>';
+                        txt += '</tr>\n';
+                    }
+                    rcnt++;
+                }
+                txt += '</table></td></tr></table></div></td>\n';
+                txt += '<td valign="top"><div id="ent-detail" style="margin-left:20px">'
+                    + '</div></td></tr></table>';
+                Dom.get('ws-result').innerHTML = txt;
+            }
+
+
+            if (res.Debug > 0)
+            {
+                txt = '';
+                if ((res.Debug & 1) == 1)
+                {
+                    txt += '<hr><b>XML Request</b>';
+                    txt += '<div class="marg-top1e">' + res.XmlReq + '</div>';
+                }
+                if ((res.Debug & 2) == 2)
+                {
+                    txt += '<hr><b>SOAP Envelope</b>';
+                    txt += '<div class="marg-top1e">' + res.SoapEnv + '</div>';
+                }
+                if ((res.Debug & 4) == 4)
+                {
+                    txt += '<hr><b>Request</b>';
+                    txt += '<div class="marg-top1e">' + res.Request + '</div>';
+                }
+                if ((res.Debug & 8) == 8)
+                {
+                    txt += '<hr><b>Raw Response</b>';
+                    txt += '<div class="marg-top1e">' + res.RawRes + '</div>';
+                }
+                if ((res.Debug & 16) == 16)
+                {
+                    txt += '<hr><b>Full Response</b>';
+                    txt += '<div class="marg-top1e">' + res.FullRes + '</div>';
+                }
+                if ((res.Debug & 32) == 32)
+                {
+                    txt += '<hr><b>Simple Response</b>';
+                    txt += '<div class="marg-top1e">' + res.SimRes + '</div>';
+                }
+                if ((res.Debug & 64) == 64)
+                {
+                    txt += '<hr><b>Socket Error</b>';
+                    if (res.SockErr == '') {
+                        txt += '<div class="marg-top1e">(none)</div>';
+                    } else {
+                        txt += '<div class="marg-top1e">' + res.SockErr + '</div>';
+                    }
+                }
+                Dom.get('dbg-values').innerHTML = txt;
+            }
+
+            break;
+        }
+    };
+
+    var sUrl = '<?php echo $sitepath; ?>case/gdc-ws.sec';
+    var callback = {
+        success: handleOperation,
+        failure: function(o){
+<?php
+if ($_SESSION['userType'] > CLIENT_ADMIN) {
+    ?>
+            alert("Failed connecting to " + sUrl);
+    <?php
+} else {
+    ?>
+            var a = 1; <?php // do nothing ?>
+    <?php
+} ?>
+        },
+        argument: [op, arg1, arg2, arg3, arg4],
+        cache: false
+    };
+    var request = YAHOO.util.Connect.asyncRequest('POST', sUrl, callback, postData);
+    return false; <?php // cancel href action ?>
+};
+
+})();
+function resetReviewLog(){
+    document.getElementById('gdc-review-log-content').innerHTML = '';
+}
+let ongoingRequest = null;
+async function getArticleSummary(articleURL, subjectName) {
+
+if (ongoingRequest) {
+    ongoingRequest.cancel();
+}
+document.getElementById('summaryKeyWordsAIEmpty').style = "display:none";
+
+const request = {
+    canceled: false,
+    cancel() {
+        this.canceled = true;
+    }
+};
+
+ongoingRequest = request;
+
+$('#aiSummaryLoading').show();
+$('#summaryFromAI').hide();
+document.getElementById('aiSummaryError').style = "display:none";
+
+<?php if($aiSummarisationEnabled !== true){ ?>
+    $('#aiSummaryLoading').hide();
+    document.getElementById('aiSummaryError').style = "display:flex";
+    document.getElementById('aiSummaryErrorText').innerHTML = "AI summarisation is not enabled for this tenant.";
+    return;
+<?php } ?>
+
+var postData = {
+    subjectName: subjectName,
+    articleURL: articleURL,
+    wsUrl: "<?php echo getenv('aiWebsocketUrl'); ?>",
+    userID: "<?php echo $_SESSION['id']; ?>",
+};
+let timeoutId = null;
+let requestCompleted = false;
+const errorMsg = "AI service wasn't able to summarise the article because of internal errors or web content limitations. Please consume the original article.";
+
+const timeoutPromise = new Promise((resolve, reject) => {
+    timeoutId = setTimeout(() => {
+        if (!requestCompleted && !request.canceled) {
+            reject({
+                status: "error",
+                message: "AI service timed out. Please consume the original article.",
+            });
+        }
+    }, 60000);
+});
+
+try {
+    const data = await Promise.race([gdcdata.getAISummary(postData), timeoutPromise]);
+
+    if (request.canceled) {
+        return;
+    }
+
+    requestCompleted = true;
+    clearTimeout(timeoutId);
+
+    if (data.status == 'success') {
+        $('#summaryFromAI').show();
+        $('#aiSummaryLoading').hide();
+        document.getElementById('summaryFromAI').innerHTML = data.body.summary;
+
+        let updateKeyWordsHtml = "";
+        if(data.body.keywords.length == 0) {
+            document.getElementById('summaryKeyWordsAIEmpty').style = "display:flex";
+            document.getElementById('summaryKeyWordsAI').style = "display:none";
+
+        } else {
+            document.getElementById('summaryKeyWordsAIEmpty').style = "display:none";
+            for (var keyword in data.body.keywords) {
+                if (keyword.trim != '') {
+                    updateKeyWordsHtml += "<span class=\"summary-keyword\">" + data.body.keywords[keyword] + "</span>";
+                }
+            }
+            document.getElementById('summaryKeyWordsAI').style = "display:block";
+            document.getElementById('summaryKeyWordsAI').innerHTML = updateKeyWordsHtml;
+        }
+
+        if (data.body.source === 'LLM') {
+            let auditLogURL = '<?php echo $sitepath; ?>thirdparty/profileDetail/gdc-ws.sec';
+            $.ajax({
+                url: auditLogURL,
+                type: 'POST',
+                data: {
+                    op: 'auditLog-mm-summary-hit',
+                    gdcReviewAuth: gdcdata.auth
+                },
+                success: function(response) {
+                },
+                error: function(error) {
+                    console.error("Error logging summary:", error);
+                }
+            });
+        }
+    } if(data.status == 'error') {
+        $('#aiSummaryLoading').hide();
+        document.getElementById('aiSummaryError').style = "display:flex";
+        document.getElementById('aiSummaryErrorText').innerHTML = errorMsg;
+
+    }
+}
+catch (error) {
+    if (!request.canceled) {
+        clearTimeout(timeoutId);
+        console.error("Error fetching article summary:", error);
+        $('#aiSummaryLoading').hide();
+        document.getElementById('aiSummaryError').style = "display:flex";
+        document.getElementById('aiSummaryErrorText').innerHTML = error.message || errorMsg;
+    }
+}
+}
+</script>
+ <!--case GDC New Popup -->
+  <style>
+   #caseMonitorPanelDiv{
+    #load_gdc_data{
+      min-height: 450px;
+      max-height: 600px;
+      overflow: scroll;
+      .yui-content{
+        background: #FFFFFF;
+        border: none;
+      }
+      .yui-nav{
+        border: none;
+        li{
+          a{
+            background: none;
+            border-radius: 6px;
+          }
+          em{
+            color: #5D7599;
+            border: none;
+          }
+        }
+        li.selected {
+          background: #ffffff !important;
+          a {
+          background: #5D7599 !important;
+          em{
+            color: #FFFFFF;
+          }
+        }
+       }
+      }
+    }
+    #subject-list tr.hi {
+      background-color: #88cefa;
+    }
+  }
+</style>
+ <div id="caseMonitorPanelDiv" class="disp-none">
+        <div class="hd"><span class="panelFormTitle">Global Database Check</span></div>
+        <div class="bd">
+            <!-- first content -->
+
+<div id="ifrbody">
+<div id="gdc-case-info"><table width="98%"
+cellpadding="0" cellspacing="0">
+<tr>
+    <td width="78" valign="top" id="caseFolderImage"><?php echo $caseFolderImage; ?></td>
+    <td valign="top" id="caseSummaryInfo"><?php echo $caseSummaryInfo; ?></td>
+    <td valign="top" align="right">
+        <span><a href="javascript:void(0)"
+            onclick="parent.window.YAHOO.gdcifr.caseClosePanel()"><span class="fas fa-save"></span><br />Save</a></span>
+    </td>
+</tr>
+</table></div>
+<div id="load_gdc_data"></div>
+</div>
+</div>
+</div>
+<script type="text/javascript">
+        casePanel = new YAHOO.widget.Panel('caseMonitorPanelDiv', {
+            visible: false,
+            width: '1200px',
+            modal: true
+        });
+        casePanel.rendered = false;
+        Dom.removeClass('caseMonitorPanelDiv', 'disp-none');
+        casePanel.init = true;
+        casePanel.typing = 0;
+        casePanel.activeRequest = null;
+        YAHOO.gdcifr.caseClosePanel = function() {
+            casePanel.hide();
+        };
+        casePanel.render(document.body);
+        casePanel.center();
+        casePanel.show();
+    </script>
+
+<div id="iHelpPanel" class="disp-none">
+  <div class="hd"></div>
+  <div class="bd"></div>
+  <div class="ft"></div>
+</div>
+
+<div id="gdc-review-log" class="disp-none">
+  <div class="hd"><div class="panelFormTitle">Screening Review Log</div></div>
+  <div class="bd"><div id="gdc-review-log-content1"></div></div>
+  <div class="ft"></div>
+</div>
+
+<div id="gdc-detail-view" class="disp-none modal">
+    <div id="gdc-detail-view-div">
+        <div class="adjudication-ovheader">
+            <h2 class="adjudication-ovtitle">Adjudication</h2>
+            <a class="adjudication-ovclose" onclick="gdcdata.adjudicationClose()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M6.40002 18.6538L5.34619 17.6L10.9462 12L5.34619 6.40002L6.40002 5.34619L12 10.9462L17.6 5.34619L18.6538 6.40002L13.0538 12L18.6538 17.6L17.6 18.6538L12 13.0538L6.40002 18.6538Z" fill="#282E37"></path>
+                </svg>
+            </a>
+        </div>
+        <div class="modal-content">
+            <div class="adjudication-content">
+                <div class="adjudication-header">
+                    <p id="mmArticleName">ARTILCE NAME</p>
+                    <div class="mmRelevancePublished">
+                        <span id="mmArticleRelevance">&nbsp;90%&nbsp;</span>
+                        <span id="mmArticlePublished">27/05/2024</span>
+                    </div>
+                    <div class="text-wrapper-label" id="publicationSummaryDiv">
+                        <p id="publicationSummaryTitle">Summary</p>
+                        <p id="publicationSummary"></p>
+                        <div id="sourceFromOriginal">
+                            Sourced from the original page
+                        </div>
+                    </div>
+                </div>
+                <div id="gdc-detail"></div>
+                <hr>
+                <form name="adjudicationForm" id="adjudicationForm">
+                    <div class="text-wrapper-div">
+                        <div class="text-wrapper">
+                            <span class="text-wrapper-circle">1</span>
+                            <div class="text-wrapper-label">Adjudication status<span class="text-wrapper-astrisk">*</span></div>
+                        </div>
+                        <select class="adjudicationStatus select-input" id="gdc-eval-options">
+                            <option value="undetermined">Undetermined</option>
+                            <option value="match">True Match</option>
+                            <option value="falsePositive">False positive</option>
+                        </select>
+                    </div>
+                    <div id="gdc-reasons-container"  class="text-wrapper-div">
+                        <div class="text-wrapper">
+                            <span class="text-wrapper-circle">2</span>
+                            <div class="text-wrapper-label">Adjudication Reason<span class="text-wrapper-astrisk">*</span></div>
+                        </div>
+                        <select  id="gdc-reason-dropdown" class ="select-input">
+                        </select>
+                        <input type="hidden" value="" name="gdc-reasonid" id="gdc-reasonid">
+                        <div class="wrapper">
+                            <textarea name="gdc-note" id="gdc-note" cols="30" rows="10"
+                                        placeholder="Write a note here (Optional)" maxlength="2000">
+                            </textarea>
+                            <div class="count-wrapper" id="count-wrapper-single">
+                                <span id="chars-single">0</span>
+                                <span class="maximum-limit">/ 2000</span>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+                <div id="adjudicationAuditLog">
+                    <div class="basis-summary-header"  onclick="gdcdata.controlBasisSummary('audit-log-img', 'gdc-review-log-contentcls', 1)" id="gdc-review-link">
+                        <img class="audit-log-img active" src="<?php echo $sitepath; ?>/aws/images/expand.png">
+                        <span class="fw-bold basis-summary-title">Audit Log</span>
+                    </div>
+                    <div id="gdc-review-log-content" class="gdc-review-log-contentcls">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="adjudication-footer">
+            <button id="gdc-detail-cancel-btn" class="btn close">&times; Cancel</button>
+            <button id="gdc-detail-update-btn" class="btn">Submit</button>
+        </div>
+    </div>
+</div>
+<div id="adjudicationPopUp" class="disp-none">
+  <div class="hd"><div id="panelFormTitle" class="panelFormTitle">Source Record Detail from Global Database
+    Check</div></div>
+  <div class="bd">
+    <div id="gdc-detail-all">
+      <div id="gdc-detail-btns"><table width="400" cellpadding="3" cellspacing="0"><tr>
+        <td>
+            <table id="gdc-record-eval" cellspacing="3" cellpadding="0">
+            <tbody>
+            <tr>
+              <td>
+                  <label for="gdc-eval-match"><span class="fas fa-bullseye" style="font-size: 16px;"></span></label>
+              </td>
+              <td>
+            <label for="gdc-eval-undetermined"><span class="fas fa-question" style="font-size: 16px;"></span></label>
+              </td><td>
+            <label for="gdc-eval-falsePositive"><span class="fas fa-times-circle" style="font-size: 16px;"></span></label>
+              </td>
+            </tr>
+            <tr id="gdc-eval-optionsnew">
+              <td>
+            <input id="gdc-eval-match" name="gdc-eval" type="radio"
+              value="match" title="True Match" />
+              </td>
+              <td>
+            <input id="gdc-eval-undetermined" name="gdc-eval" type="radio"
+              value="undetermined" title="Undetermined" />
+              </td>
+              <td>
+            <input id="gdc-eval-falsePositive" name="gdc-eval" type="radio"
+              value="falsePositive" title="False Positive" />
+              </td>
+            </tr>
+            </tbody>
+            </table>
+        </td>
+        <td width="55"><div id="gdc-view-log-link" class="ta-cent"><a
+            href="javascript:void(0)"
+            onclick="gdcdata.opRequest('review-log')" id="gdc-review-link">View<br />Log</a></div></td>
+        <td width="140" align="right" class="no-wrap">
+          <button id="gdc-detail-update-btn" class="btn">Update</button>
+          <button id="gdc-detail-cancel-btn" class="btn">Cancel</button></td>
+      </tr></table></div>
+      <hr />
+        <div id="gdc-reasons-containerold">
+            <select id="gdc-reason-dropdownold">
+            </select><br>
+            <input type="hidden" value="" name="gdc-reasonid" id="gdc-reasonid">
+            <textarea name="gdc-notenew" id="gdc-note" cols="30" rows="10"
+            placeholder="Write a note here (Optional)" maxlength="2000">
+            </textarea>
+            <p>Characters remaining: <b id="chars-single">2000</b></p>
+        </div>
+      <div id="gdc-detail1"></div>
+    </div>
+  </div>
+  <div class="ft"></div>
+</div>
+<div id="mm-contain" class="mm-contain"></div>
+<?php
+noShellFoot(true);

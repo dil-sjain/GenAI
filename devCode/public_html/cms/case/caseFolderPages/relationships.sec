@@ -1,0 +1,407 @@
+<?php
+require_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(TRUE, -1);
+require_once __DIR__ . '/../../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCaseRelation')) {
+    // The following prevents this condition from
+    // breaking PDF rendering
+    if (isset($toPDF) && $toPDF) {
+        echo 'Access denied.';
+        return;
+    }
+    else {
+        exit('Access denied.');
+    }
+}
+require_once __DIR__ . '/../../includes/php/'."funcs.php";
+require_once __DIR__ . '/../../includes/php/'."ddq_funcs.php";
+require_once __DIR__ . '/../../includes/php/'."country_state_ddl.php";
+include_once __DIR__ . '/../../includes/php/'.'Models/TPM/IntakeForms/IntakeFormQuestions.php';
+
+$jsHelpData = false;
+
+  if( !isset($_SESSION['szClientName']) )
+    $_SESSION['szClientName'] = fGetClientName( $_SESSION['clientID'] );
+
+  // Check for login/Security
+  fchkUser( "casehome" );
+
+
+?>
+
+<!--Start Center Content-->
+<form action="ddq6.php" method="post" name="ddqform" class="cmsform" id="ddqform">
+<input type="hidden" name="Submit" />
+
+<?php
+  // Load all of the questions for this page
+  $_SESSION['aOnlineQuestions'] = foqLoadCompletePage(
+      $_SESSION['clientID'],
+      $_SESSION['languageCode'],
+      $_SESSION['ddqRow'][107],
+      'Relationships',
+      $_SESSION['ddqID']
+  );
+
+  $_SESSION['CNC']['baRemoveCompanyModal'] = foqGetQRowFromPage($_SESSION['aOnlineQuestions'],
+                                                                'CMD_RM_COMPANY_MODAL');
+
+  if (!$_SESSION['CNC']['baRemoveCompanyModal']
+      && $_SESSION['clientID'] != GENMILLS_CLIENTID
+      && $_SESSION['clientID'] != VISAQC_CLIENTID
+      && $_SESSION['clientID'] != VISA_CLIENTID) { ?>
+
+
+<?php
+
+  // We need to load all of the Add Company Modal and IFrame tags into Session data so they will have have access
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_ADDR_ADDCOMP' );
+  $_SESSION['CompTags']['Address'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_COMPNAME_ADDCOMP' );
+  $_SESSION['CompTags']['CompName'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_CONTACT_ADDCOMP' );
+  $_SESSION['CompTags']['Contact'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_COFREG_ADDCOMP' );
+  $_SESSION['CompTags']['CofReg'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_NAME_ADDCOMP' );
+  $_SESSION['CompTags']['Name'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_OWNERSHIP_ADDCOMP' );
+  $_SESSION['CompTags']['Ownership'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_PERCENT_ADDCOMP' );
+  $_SESSION['CompTags']['Percent'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_REGNUM_ADDCOMP' );
+  $_SESSION['CompTags']['RegNum'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_RELATIONSHIP_ADDCOMP' );
+  $_SESSION['CompTags']['Relationship'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_PHONE_ADDCOMP' );
+  $_SESSION['CompTags']['Phone'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_ADDINFO_ADDCOMP' );
+  $_SESSION['CompTags']['AddInfo'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_STATEOWNED_ADDCOMP' )) {
+    $_SESSION['CompTags']['StateOwned'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+  } else {
+    $_SESSION['CompTags']['StateOwned'] = '';
+  }
+
+
+  if ($_SESSION['clientID'] == SMITH_NEPHEWQC_CLIENTID || $_SESSION['clientID'] == SMITH_NEPHEW_CLIENTID) {
+      $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_COMPNAME_LBHEAD' );
+      $_SESSION['CompTags']['CompNameLBhead'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+      $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_OWNERNAME_LBHEAD' );
+      $_SESSION['CompTags']['OwnerNameLBhead'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+      $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_OWNEMAIL_LBHEAD' );
+      $_SESSION['CompTags']['OwnEmailLBhead'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+      $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_INTERACTWSN_LBHEAD' );
+      $_SESSION['CompTags']['InterActWsnLBhead'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+      $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_BUSPERCENT_LBHEAD' );
+      $_SESSION['CompTags']['BusPercentLBhead'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+      $aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_GEOLOC_LBHEAD' );
+      $_SESSION['CompTags']['GeoLocLBhead'] = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+  }
+
+
+?>
+
+<!--
+<p><b>PARENT, SUBSIDIARY & AFFILIATED COMPANY(S)</b><br />
+  <em>List of your Company's parent, subsidiaries, and affiliates, including your Company's ultimate holding company </em></p>
+-->
+<p><b>
+<?php
+  if ($_SESSION['clientID'] != SMITH_NEPHEWQC_CLIENTID && $_SESSION['clientID'] != SMITH_NEPHEW_CLIENTID) {
+      if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_PARENTCOMP_SECTIONHEAD' )) {
+        echo( $aQuestionRow[5] );
+      } else {
+        echo "";
+      }
+  }
+?>
+</b></p>
+
+<table border="0" cellspacing="0" cellpadding="0" width="100%">
+  <tr>
+    <td colspan="2" align="left" valign="top">
+<div id="tableHoldDivBlueCseFolder">
+  <table cellspacing="0" id="myTable">
+    <tr>
+      <?php if ($_SESSION['clientID'] == SMITH_NEPHEWQC_CLIENTID || $_SESSION['clientID'] == SMITH_NEPHEW_CLIENTID) { ?>
+         <th width="238" scope="col"><div align="left"><?php
+             echo $_SESSION['CompTags']['CompNameLBhead'];
+         ?></div></th>
+         <th width="228" scope="col"><div align="left"><?php echo $_SESSION['CompTags']['OwnerNameLBhead']?></div></th>
+         <th width="341" scope="col"><div align="left"><?php echo $_SESSION['CompTags']['OwnEmailLBhead']?></div></th>
+         <th width="241" scope="col"><div align="left"><?php echo $_SESSION['CompTags']['InterActWsnLBhead'] ?></div></th>
+         <th width="241" scope="col"><div align="left"><?php echo $_SESSION['CompTags']['BusPercentLBhead']?></div></th>
+         <th width="241" scope="col"><div align="left"><?php echo $_SESSION['CompTags']['GeoLocLBhead']?></div></th>
+      <?php } else { ?>
+
+      <th align="left" scope="col"><?php echo $_SESSION['CompTags']['CompName']; ?></th>
+      <th align="left" scope="col"><?php echo $_SESSION['CompTags']['Relationship']; ?></th>
+      <?php if( $_SESSION['clientID'] == CISCO_CLIENTID ) { ?>
+      <th align="left" scope="col">URL</th>
+      <?php } else { ?>
+      <th align="left" scope="col"><?php echo $_SESSION['CompTags']['Address']; ?></th>
+      <th align="left" scope="col"><?php echo $_SESSION['CompTags']['CofReg']; ?></th>
+      <th width="left" scope="col"><?php echo $_SESSION['CompTags']['RegNum'];?></th>
+      <th width="left" scope="col"><?php echo $_SESSION['CompTags']['Name'];?></th>
+      <th width="left" scope="col"><?php echo $_SESSION['CompTags']['Phone'];?></th>
+      <th align="left" class="no-wrap" scope="col"><?php
+          /*
+           * As requested by Todd, sec-399, 05/06/14
+           * echo $_SESSION['CompTags']['Percent'];
+           */
+      ?>% Owned</th>
+<?php }
+       } ?>
+
+  </tr>
+        <?php
+        fGetDDQcompanies($_SESSION['clientID'], $_SESSION['ddqRow'][0], 0, $jsHelpData);
+        ?>
+  </table>
+</div>
+</td></tr></table>
+
+<?php } // end if ($_SESSION['clientID'] != GENMILLS_CLIENTID && $_SESSION['clientID'] != VISAQC_CLIENTID) ?>
+
+<!-- <input type="submit" name="Submit" id="Submit" value="Add Company" /> -->
+
+<p>
+<?php //  <p><b>RELATIONSHIPS WITH echo strtoupper($_SESSION['szClientName']); </b></p>
+  if ($_SESSION['clientID'] != CISCO_CLIENTID
+      && $_SESSION['clientID'] != GENMILLS_CLIENTID) {
+      // Load the RELATIONSHIPS WITH Section Heading from the DB so we can fall back to default..it is a late addition and
+        // may not have a custom addition
+      $onlineQuestionRow = foqGetOnlineQuestionsRow(  $_SESSION['clientID'], "TEXT_RELATIONWITH_SECTIONHEAD",
+                                                      $_SESSION['languageCode'], $_SESSION['ddqRow'][107],
+                                                      $_SESSION['ddqID'] );
+
+      if( $onlineQuestionRow )
+        {
+          $text = "$onlineQuestionRow[5]";
+          $i = substr_count( $text, '<Client Name>' );
+
+          if( !($i) )
+              echo( $onlineQuestionRow[5] );
+          else
+            {
+              $szHeading = str_replace( "<Client Name>", $_SESSION['szClientName'], (string) $onlineQuestionRow[5] );
+              echo( "$szHeading" );
+            }
+        } //end if onlineQuestionRow
+      else // If nothing at all can be found, fall back to the hard coded english
+        {
+          $szHeading = "<b>Relationships With " . "{$_SESSION['szClientName']} </b>";
+          echo( $szHeading );
+        }
+  }  // end if
+?>
+</p>
+<table width="100%" border="0" class="paddiv">
+  <?php
+    // Load up the RELATIONSHIPS WITH Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the RELATIONSHIPS WITH Section elements
+        if( $aOnlineQuestionsRow[9] == "RELATIONSHIPS WITH" )
+          {
+            echo( "<tr>" );
+              foqPrintEchoLabel( $aOnlineQuestionsRow, 1, "70%" );
+              foqEchoDDQvalue( $aOnlineQuestionsRow, 1, "30%" );
+            echo( "</tr>" );
+          }
+      }
+  ?>
+</table>
+
+<table width="500" border="0">
+  <?php
+    // Load up the EXPLAIN RELATIONSHIPS Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the EXPLAIN RELATIONSHIPS Section elements
+        if( $aOnlineQuestionsRow[9] == "EXPLAIN RELATIONSHIPS" )
+          {
+            echo( "<tr>" );
+              foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 500 );
+            echo( "</tr>" );
+            echo( "<tr>" );
+              foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 500 );
+            echo( "</tr>" );
+          }
+      }
+  ?>
+</table>
+
+<p>
+<?php // Government Relationships Section Heading
+  if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_GOVRELATION_SECTIONHEAD' )) {
+    echo( $aQuestionRow[5] );
+  } {
+    echo "";
+  }
+?>
+</p>
+
+<table width="100%" border="0" class="paddiv">
+  <?php
+    // Load up the GOVERNMENT RELATIONSHIPS Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the GOVERNMENT RELATIONSHIPS Section elements
+        if( $aOnlineQuestionsRow[9] == "GOVERNMENT RELATIONSHIPS" )
+          {
+
+            if( $aOnlineQuestionsRow[6] == 'tarbYes' )
+              {
+                echo( "<tr>" );
+                  foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 500 );
+                echo( "</tr>" );
+                echo( "<tr>" );
+                  foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 500 );
+                echo( "</tr>" );
+              }
+            else
+              {
+                echo( "<tr>" );
+                  foqPrintEchoLabel( $aOnlineQuestionsRow, 1, "70%" );
+                  foqEchoDDQvalue( $aOnlineQuestionsRow, 1, "30%" );
+                echo( "</tr>" );
+              }
+          }
+      }
+  ?>
+</table>
+
+<table width="500" border="0">
+  <?php
+    // Load up the EXPLAIN GOVERNMENT RELATIONSHIPS Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the EXPLAIN GOVERNMENT RELATIONSHIPS Section elements
+        if( $aOnlineQuestionsRow[9] == "EXPLAIN GOVERNMENT RELATIONSHIPS" )
+          {
+            echo( "<tr>" );
+              foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 500 );
+            echo( "</tr>" );
+            echo( "<tr>" );
+              foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 500 );
+            echo( "</tr>" );
+          }
+      }
+  ?>
+</table>
+<br />
+<?php
+// Load up the REFERENCES DESC Section
+$referencesExist = false;
+foreach ($_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow) {
+    // Find all of the REFERENCES DESC Section elements
+    if ($aOnlineQuestionsRow[9] == "REFERENCES_DESC") {
+        if (!$referencesExist) {
+            $referencesExist = true;
+            $referencesLbl = getOqLabelText(
+                $_SESSION['clientID'],
+                'TEXT_REFERENCES_SECTIONHEAD',
+                'EN_US',
+                $_SESSION['ddqRow']['caseType'],
+                $_SESSION['ddqRow']['ddqQuestionVer']
+            );
+            echo '<p class="pgbrk sect">'. $referencesLbl .'</p>'
+                . '<hr width="100%" size="1" noshade="noshade" />';
+        }
+        foqEchoTextLabel($aOnlineQuestionsRow);
+        echo "<br />";
+    }
+}
+?>
+
+<table width="676" border="0">
+  <?php
+    // Load up the REFERENCES Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the REFERENCES Section elements
+        if( $aOnlineQuestionsRow[9] == "REFERENCES" )
+          {
+            echo( "<tr>" );
+              foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 321 );
+              foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 435 );
+            echo( "</tr>" );
+          }
+      }
+  ?>
+</table>
+
+<?php
+echo( "<table width=\"100%\" border=\"0\" cellspacing=\"8\" cellpadding=\"0\">" );
+
+        // Load up the Extended Question and Answer (eQ&A) Section
+        $IntakeFormQuestions =  new IntakeFormQuestions($_SESSION['clientID']);
+        $instancesID = null;
+
+        // Find intakeFormInstances.caseID = cases.id or move along
+        if ((int)$_SESSION['currentCaseID'] > 0) {
+            $instancesID = $IntakeFormQuestions->getInstanceIdByCaseId($_SESSION['currentCaseID']);
+        }
+
+        if ($instancesID) {
+
+            // find eQ&A
+            $sectionID = 5;  // 5 === 'Relationships'
+            $cfg = $IntakeFormQuestions->getCfgByInstanceId($instancesID);
+            $intakeFormCfgID = $cfg['intakeFormCfgID'];
+            $languageCode = $cfg['languageCode'];
+            $eqa = $IntakeFormQuestions->getExtensionsBySectionID($sectionID, $intakeFormCfgID, $languageCode, $instancesID);
+
+            // Display eQ&A
+            if ($eqa && $eqa[0]) {
+              echo( "<tr>" );
+              echo( "<td colspan=\"2\">" );
+              echo( "<div style=\"margin-top:1em;\"><b>Extended Question & Answers</b></div></td>" );
+              echo( "</tr>" );
+              echo( "<tr><td colspan=\"2\"><div class=\"tblrule\">&nbsp;</div></td></tr>" );
+
+              $IntakeFormQuestions->display3PM($eqa);
+          }
+      }
+
+
+echo( "</table>" );
+?>
+
+
+  <p>&nbsp;</p>
+</form>
+<?php
+if ($jsHelpData) {
+    ?>
+    <style type="text/css">
+    .addInfoHelper {
+        cursor:pointer;
+        margin-right:5px;
+        vertical-align:text-bottom;
+    }
+    </style>
+    <script type="text/javascript">
+    (function()
+    {
+        var tmphelp = [<?php echo $jsHelpData; ?>];
+        var i;
+        if (tmphelp.length) {
+            for (i in tmphelp) {
+                iHelp.addData(tmphelp[i]);
+            }
+        }
+    })();
+    </script>
+    <?php
+}
+
+  // End of ddq6 Page
+  // Make sure the question array is cleaned out in prep for next page
+  unset( $_SESSION['aOnlineQuestions'] );
+
+?>

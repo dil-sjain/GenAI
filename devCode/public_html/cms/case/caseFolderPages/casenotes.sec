@@ -1,0 +1,782 @@
+<?php
+/**
+ * List case attachments and provide means to add attachment if permitted
+ */
+
+if (defined('IN_SPL_PDF')) {
+    // prevent direct access
+    if (realpath($_SERVER['SCRIPT_FILENAME']) == __FILE__) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            return;
+        } else {
+            exit;
+        }
+    }
+    $canAddNote = false;
+    $isVendor   = true;
+} else {
+    include_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+    $session->cms_logged_in(true, -1);
+    include_once __DIR__ . '/../../includes/php/'.'class_access.php';
+    $accCls = UserAccess::getInstance();
+    if (!$accCls->allow('accCaseNotes')) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            echo 'Access denied.';
+            return;
+        } else {
+            exit('Access denied.');
+        }
+    }
+    include_once __DIR__ . '/../../includes/php/'.'funcs_cases.php';
+    include_once __DIR__ . '/../../includes/php/'.'class_db.php';
+    $dbCls->open();
+    // Validate access and assign $clientID, $caseID and $caseRow
+    if (!isset($_SESSION['currentCaseID'])
+        || !($caseID = $_SESSION['currentCaseID'])
+        || !($clientID = $_SESSION['clientID'])
+        || !($caseRow = fGetCaseRow($caseID))
+    ) {
+        return;
+    }
+    $splPDF = false;
+    if (!isset($toPDF)) {
+        $toPDF = false;
+    }
+    $canAddNote = ($_SESSION['userSecLevel'] > READ_ONLY
+        && !$toPDF && $accCls->allow('addCaseNote')
+    );
+    $isVendor = $_SESSION['sim-userClass'] == 'vendor';
+    $userType = $_SESSION['userType'];
+}
+
+$minPP = 15;
+$startIdx = 0;
+$recsPerPage = $minPP;
+$ttlRecs = 0;
+$orderBy = 'subj';
+$sortDir = 'yui-dt-asc';
+
+$e_clientID = intval($clientID);
+
+//<div id="myLogger"></div>
+//var myLogReader = new YAHOO.widget.LogReader();
+
+if (!$isVendor) {
+    $noteCats = $dbCls->fetchKeyValueRows("SELECT id, name "
+        . "FROM noteCategory WHERE clientID='$e_clientID' AND id > 0 ORDER BY name ASC"
+    );
+
+    if (!is_array($noteCats) || !count($noteCats)) {
+        $newrec = 0;
+        $newname = 'General Information';
+        if ($dbCls->query("INSERT INTO noteCategory SET clientID='$e_clientID', "
+            . "name='$newname'"
+        ) && ($newrec = $dbCls->insert_id())) {
+            $noteCats = [$newrec => $newname];
+        }
+    }
+    $noteCatOptions = '';
+    foreach ($noteCats AS $i => $n) {
+        $noteCatOptions .= "<option value=\"$i\">$n</option>\n";
+    }
+}
+
+?>
+
+<div style="padding:7px;">
+<!-- Begin tab content -->
+
+<div style="margin:1em 0;">
+<script type="text/javascript" src="/cms/js/inputValidation/XssValidation.js"></script>
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr>
+    <td valign="top" class="fw-normal"><i>Notes are auditable and become a permanent
+        record in this case folder.</i></td>
+    <td class="ta-right"><?php
+if ($canAddNote) {
+    ?>
+    <div id="notes-btns"><button
+        id="add-note-btn" class="btn">Add New</button></div>
+    <?php
+} ?></td>
+</tr>
+</table>
+</div>
+
+<?php
+if ($canAddNote) {
+    ?>
+    <div id="notes-frm">
+        <div class="hd"><div class="panelFormTitle">Enter Your Note</div></div>
+        <div class="bd">
+    <table cellpadding="0" cellspacing="0"><tr><td><div style="padding:8px;">
+
+    <form action="/cms/casehome.sec" method="post" onsubmit="return false;">
+    <table cellspacing="0" cellpadding="4">
+    <?php
+    if (!$isVendor) {
+        ?>
+        <tr>
+            <td><div class="fw-normal">Category:</div></td>
+            <td><select class="cudat-medium" id="dd_note_category"
+                name="dd_note_category" data-no-trsl-cl-labels-sel="1"><?php echo $noteCatOptions?></select></td>
+        </tr>
+        <?php
+    } ?>
+    <tr>
+        <td><div class="fw-normal">Subject:</div></td>
+        <td><input class="cudat-medium no-trsl" type="text" maxlength="255" id="tf_note_subject"
+            name="tf_note_subject" value="" /></td>
+    </tr>
+    <tr>
+        <td valign="top"><div class="fw-normal"
+            style="white-space:nowrap; padding-top:3px;">Enter note:</div></td>
+        <td><textarea name="ta_note" id="ta_note" wrap="soft"
+            class="cudat-xlarge cudat-normal-h marg-rt0 no-trsl" cols="15"
+            rows="5"></textarea></td>
+    </tr>
+    <?php
+    if (!$isVendor) {
+        ?>
+        <tr>
+            <td></td>
+            <td><table style="width:398px" cellspacing="0" cellpadding="0"><tr>
+                <td>Characters remaining:<span id="notechars" class="fw-bold"
+                    style="padding-left:.5em;">2000</span></td>
+                <td><table align="right" cellpadding="0" cellspacing="0"><tr><td><div
+                    class="marg-rtsm"><input id="iseenote" type="checkbox" value="1"
+                    class="marg-rt0" /></div></td><td><label for="iseenote"
+                    class="fw-normal">Allow investigator to view this
+                    note.</label></td></tr></table></td>
+             </tr></table></td>
+        </tr>
+        <?php
+    } else {
+        ?>
+        <tr>
+            <td></td>
+            <td>Characters remaining:<span id="notechars" class="fw-bold"
+                style="padding-left:.5em;">2000</span></td>
+        </tr>
+        <?php
+    } ?>
+    <tr>
+        <td></td>
+        <td align="right"><button class="v-hidden btn" id="save-note-btn">Save</button>
+            <button class="v-hidden marg-rt0 btn" id="close-note-btn"
+            onclick="setNotesForm('hide')">Close</button></td>
+    </tr>
+    <tr>
+        <td colspan="2"><div class="fw-normal ta-cent" style="padding-top:.5em"><span
+            style="padding-right:.5em"><b>Notice:</b></span> Within 30 minutes of
+            saving a note, you may edit or delete it.<br />
+            Afterwards, it becomes a permanent part of this case folder.</div></td>
+    </tr>
+    </table>
+    </form>
+    </div></td></tr></table>
+
+        </div>
+        <div class="ft"></div>
+    </div>
+
+    <?php
+} ?>
+
+<div id="note-view">
+    <div class="hd"><div class="panelFormTitle" id="note-view-title">Case Note</div></div>
+    <div class="bd">
+
+<table width="430" cellpadding="0" cellspacing="0">
+<tr>
+    <td>
+
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr>
+    <td valign="top"><div class="marg-rtsm fw-bold"
+        style="padding-bottom:5px;">Subject:</div></td>
+    <td valign="top" width="100%"><div id="note-prev-subj">&nbsp;</div></td>
+</tr>
+<tr>
+    <td valign="top"><div class="marg-rtsm-nobr fw-bold"
+        style="padding-bottom:5px;">Date / Time:</div></td>
+    <td valign="top"><div id="note-prev-time"></div></td>
+</tr>
+<?php
+if (!$isVendor) {
+    ?>
+    <tr>
+        <td valign="top"><div class="marg-rtsm fw-bold"
+            style="padding-bottom:5px;">Category:</div></td>
+        <td valign="top"><div id="note-prev-cat"></div></td>
+    </tr>
+    <?php
+} ?>
+<tr>
+    <td valign="top"><div class="marg-rtsm fw-bold"
+        style="padding-bottom:5px;">Owner:</div></td>
+    <td valign="top"><div id="note-prev-owner"></div></td>
+</tr>
+</table>
+
+<?php
+$longStyle = 'width:430px;margin:.5em 0 1em 0;padding:5px 0 6px 0; '
+    . 'border-top:1px solid #ccc;border-bottom:1px solid #ccc;height:0;overflow:hidden;';
+?>
+
+<div id="note-show" style="<?php echo $longStyle; ?>"></div>
+
+<div style="width:430px;"><table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td>
+<?php
+if ($canAddNote) {
+    ?>
+        <span id="vis-delredo-note-btn" class="v-hidden"
+        style="white-space:nowrap;"><button id="note-del-btn"
+        class="v-hidden btn">Delete</button> <button id="note-ed-btn"
+        class="v-hidden btn">Edit</button></span>
+    <?php
+} ?></td>
+    <td width="100%"><span id="note-until-when"
+        style="display:inline-block;padding-left:.5em;"></span></td>
+    <td align="right"><button id="note-view-close-btn" class="v-hidden btn">Close</button></td>
+</tr></table></div>
+
+    </td>
+</tr>
+</table>
+
+    </div>
+    <div class="ft"></div>
+</div>
+
+
+<div id="dtNotesDiv"></div>
+
+
+<!-- End tab content -->
+</div>
+
+<script type="text/javascript">
+
+var dtNotesList = null;
+var canAddNote = false;
+var noteRedoID = 0;
+var noteEditSig = '';
+
+function setNoteView(action, title)
+{
+    var Dom = YAHOO.util.Dom;
+    if (action == 'hide') {
+        if (canAddNote) {
+            var visDelEl = Dom.get('vis-delredo-note-btn');
+            Dom.replaceClass(visDelEl, 'v-visible', 'v-hidden');
+        }
+        dtNotesRefresh();
+        noteViewPanel.hide();
+    } else if (action == 'show') {
+        if (!noteViewPanel.rendered) {
+            noteViewPanel.rendered = true;
+            noteViewPanel.render(document.body);
+        }
+
+        <?php
+        // Fit note to content or max height at 80% of viewport
+        // Ah, if only IE6 honored max-height!
+        ?>
+        var noteEl = Dom.get('note-show'); <?php // formatted note container ?>
+        var viewEl = Dom.get('note-view'); <?php // panel ?>
+        Dom.getElementsByClassName('bd', 'div', viewEl, function(o){
+            Dom.setStyle(o,'background-color','#ffffff');
+        });
+        var region = Dom.getClientRegion();
+        Dom.setStyle(noteEl, 'overflow', 'hidden');
+        Dom.setStyle(noteEl, 'height', '0pt'); <?php // 0 height for note div ?>
+        if (title == undefined) {
+            Dom.get('note-view-title').innerHTML = 'Case Note';
+        } else {
+            Dom.get('note-view-title').innerHTML = title;
+        }
+        noteViewPanel.show();
+        var maxPanelHeight = 0.8 * (region.bottom - region.top);
+        var curPanelHeight = parseInt(Dom.getStyle(viewEl, 'height'));
+        if (isNaN(curPanelHeight)) {
+            curPanelHeight = parseInt(viewEl.offsetHeight);
+            if (isNaN(curPanelHeight))
+                curPanelHeight = 197; <?php // I give up! How 'bout a guess? ?>
+        }
+        var pixToAdd = noteEl.scrollHeight - 11;
+        if ((curPanelHeight + pixToAdd) > maxPanelHeight) {
+            pixToAdd = maxPanelHeight - curPanelHeight;
+        }
+        if (pixToAdd < 14) {
+            pixToAdd = 14;
+        }
+        var topToMove = pixToAdd / 2;
+        var curPanelTop = noteViewPanel.cfg.getProperty('y');
+        noteViewPanel.cfg.setProperty('y', curPanelTop - topToMove);
+        Dom.setStyle(noteEl, 'overflow', 'auto');
+        Dom.setStyle(noteEl, 'height', pixToAdd + 'px');
+    }
+}
+
+<?php
+if ($canAddNote) {
+    ?>
+
+    canAddNote = true;
+
+    function limitNoteLength() {
+        var Dom = YAHOO.util.Dom;
+        var el = Dom.get('ta_note');
+        var maxlen = 2000;
+        var have = el.value.length;
+        var remain = maxlen - have;
+        if (remain < 0) {
+            remain = 0;
+        }
+        var ncID = Dom.get('notechars');
+            ncID.innerHTML = remain;
+        if (have > maxlen) {
+            el.value = el.value.substring(0, maxlen);
+            showResultDiag('Limit Reached', 'Your Note has reached the maximum size.');
+        }
+    }
+
+    function mkNotePostData()
+    {
+        var Dom = YAHOO.util.Dom;
+        var subjEl = Dom.get('tf_note_subject');
+        if (rtrim(subjEl.value) == '') {
+            showResultDiag('No Subject', 'Please enter a subject for your note.');
+            return false;
+        }else{
+            if(!validateXSS(subjEl.value)){
+                showResultDiag('Invalid Subject', 'Subject contains unsafe HTML, JavaScript, or other unsafe content.');
+                return false;
+            }
+        }
+        var noteEl = Dom.get('ta_note');
+        if (rtrim(noteEl.value) == '') {
+            showResultDiag('Note Is Blank ', 'Please enter enter a note.');
+            return false;
+        }else{
+            if(!validateXSS(noteEl.value)){
+                showResultDiag('Invalid Note', 'Note contains unsafe HTML, JavaScript, or other unsafe content..');
+                return false;
+            }
+        }
+        var pd = '';
+    <?php
+    if (!$isVendor) {
+        ?>
+        var catEl = Dom.get('dd_note_category');
+        pd += '&cat=' + catEl[catEl.selectedIndex].value;
+        pd += '&isee=' + ((Dom.get('iseenote').checked) ? '1': '0');
+        <?php
+    } ?>
+        pd += '&subj=' + encodeURIComponent(subjEl.value);
+        pd += '&note=' + encodeURIComponent(noteEl.value);
+        return pd;
+    }
+
+    function clearNotesForm()
+    {
+        var Dom = YAHOO.util.Dom;
+        var subjEl = Dom.get('tf_note_subject');
+        var noteEl = Dom.get('ta_note');
+        var ncEl = Dom.get('notechars');
+        subjEl.value = '';
+        noteEl.value = '';
+    <?php
+    if (!$isVendor) {
+        ?>
+        var seeEl = Dom.get('iseenote');
+        seeEl.checked = false;
+        <?php
+    } ?>
+        ncEl.innerHTML = '2000';
+        noteRedoID = 0;
+        noteEditSig = '';
+    }
+    function setNotesForm(action)
+    {
+        var Dom = YAHOO.util.Dom;
+        var btnDiv = Dom.get('notes-btns');
+        var frmDiv = Dom.get('notes-frm');
+        if (action == 'hide') {
+            noteFormPanel.hide();
+            Dom.replaceClass(frmDiv, 'disp-block', 'disp-none');
+            Dom.replaceClass(btnDiv, 'disp-none', 'disp-block');
+        } else if (action == 'show') {
+            Dom.replaceClass(btnDiv, 'disp-block', 'disp-none');
+            Dom.replaceClass(frmDiv, 'disp-none', 'disp-block');
+            if (!noteFormPanel.rendered) {
+                noteFormPanel.rendered = true;
+                noteFormPanel.render(document.body);
+            }
+            noteFormPanel.show();
+            if (noteRedoID && noteEditSig.length) {
+                saveNoteBtn.set('label', 'Update');
+            } else {
+                saveNoteBtn.set('label', 'Save');
+            }
+        }
+        return false;
+    }
+
+    <?php
+} ?>
+
+YAHOO.util.Event.onDOMReady(function(o){
+
+    var Dom = YAHOO.util.Dom;
+    var Event = YAHOO.util.Event;
+
+<?php
+if ($canAddNote) {
+    ?>
+    var addNoteBtn = new YAHOO.widget.Button('add-note-btn', {
+        id: 'add-note-btn-yui',
+        label: 'Add New',
+        type: 'button'
+    });
+    addNoteBtn.on('click', function(o){setNotesForm('show');});
+
+    var closeNoteBtn = new YAHOO.widget.Button('close-note-btn', {
+        id: 'close-note-btn-yui',
+        label: 'Cancel',
+        type: 'button'
+    });
+    closeNoteBtn.on('click', function(o){
+        clearNotesForm();
+        setNotesForm('hide');
+    });
+
+    saveNoteBtn = new YAHOO.widget.Button('save-note-btn', {
+        id: 'save-note-btn-yui',
+        label: 'Save',
+        type: 'button'
+    });
+    saveNoteBtn.on('click', function(o){opRequest('save-note');});
+
+    var delNoteBtn = new YAHOO.widget.Button('note-del-btn', {
+        id: 'note-del-btn-yui',
+        label: 'Delete',
+        type: 'button'
+    });
+    delNoteBtn.on('click', function(o) {
+        if (confirmAction('note-del'))
+            opRequest('note-del', noteRedoID);
+    });
+
+    var edNoteBtn = new YAHOO.widget.Button('note-ed-btn', {
+        id: 'note-ed-btn-yui',
+        label: 'Edit',
+        type: 'button'
+    });
+    edNoteBtn.on('click', function(o) {
+        opRequest('note-edit', noteRedoID);
+    });
+
+
+    noteFormPanel = new YAHOO.widget.Panel('notes-frm', {
+        width: "515px",
+        modal: true,
+        close: false,
+        draggable: false,
+        fixedcenter: 'contained',
+        visible: false
+    });
+    noteFormPanel.rendered = false;
+
+    Event.addListener('ta_note', 'paste', limitNoteLength);
+    Event.addListener('ta_note', 'keydown', limitNoteLength);
+    Event.addListener('ta_note', 'keyup', limitNoteLength);
+    Event.addListener('ta_note', 'change', limitNoteLength);
+
+    <?php
+} ?>
+
+    noteViewPanel = new YAHOO.widget.Panel('note-view', {
+        width: "460px",
+        close: true,
+        modal: true,
+        draggable: false,
+        fixedcenter: 'contained',
+        visible: false
+    });
+    noteViewPanel.rendered = false;
+    noteViewPanel.hideEvent.subscribe(function(o){setNoteView('hide');});
+
+    var closeViewNoteBtn = new YAHOO.widget.Button('note-view-close-btn', {
+        id: 'note-view-close-btn-yui',
+        label: 'Close',
+        type: 'button'
+    });
+    closeViewNoteBtn.on('click', function(o){
+        noteRedoID = 0;
+        noteEditSig = '';
+        setNoteView('hide');
+    });
+
+    var clippedText = function(txt)
+    {
+        return '<table class="cliptext" style="border:none" cellspacing="0" '
+            + 'cellpadding="0"><tbody><tr><td class="cliptext no-trsl" style="border:none">'
+            + txt + '</td></tr></tbody></table>';
+    };
+
+    var dtClipSubj = function(elCell, oRecord, oColumn, oData)
+    {
+        elCell.innerHTML = clippedText(oRecord.getData('subj'));
+        elCell.onclick = function(e){opRequest('note-show', oRecord.getData('dbid'));};
+        elCell.classList.add("no-trsl");
+        elCell.setAttribute("data-tl-ignore", "1");
+    };
+
+    var dtClipNote = function(elCell, oRecord, oColumn, oData)
+    {
+        elCell.innerHTML = clippedText(oRecord.getData('note'));
+        elCell.onclick = function(e){opRequest('note-show', oRecord.getData('dbid'));};
+        elCell.classList.add("no-trsl");
+        elCell.setAttribute("data-tl-ignore", "1");
+    };
+
+    YAHOO.widget.DataTable.preventTranslations = function(elLiner, oRecord, oColumn, oData) {
+        elLiner.classList.add("no-trsl");
+        elLiner.innerHTML = oData;
+        elLiner.setAttribute("data-tl-ignore", "1");
+    };
+
+    dtNotesList = function() {
+<?php
+if (!$isVendor) {
+    ?>
+        var DSflds = [
+            'dbid',
+            'cat',
+            'owner',
+            'ndate',
+            'subj',
+            'note'
+        ];
+
+        var myColumnDefs = [
+            {key:"subj", label:"Subject", sortable:true, formatter: dtClipSubj, width:150},
+            {
+                key:"cat", label:"Category", sortable:true, width:110,
+                formatter: YAHOO.widget.DataTable.preventTranslations
+            },
+            {key:"note",  label:"Note", sortable:false, formatter: dtClipNote, width:230},
+            {key:"ndate", label:"Date", sortable:true, width:65},
+            {
+                key:"owner", label:"Owner", sortable:true, width:110,
+                formatter: YAHOO.widget.DataTable.preventTranslations
+            }
+        ];
+    <?php
+} else {
+    ?>
+        var DSflds = [
+            'dbid',
+            'owner',
+            'ndate',
+            'subj',
+            'note'
+        ];
+
+        var myColumnDefs = [
+            {key:"subj", label:"Subject", sortable:true, formatter: dtClipSubj, width:210},
+            {key:"note",  label:"Note", sortable:false, formatter: dtClipNote, width:290},
+            {key:"ndate", label:"Date", sortable:true, width:65},
+            {
+                key:"owner", label:"Owner", sortable:true, width:110,
+                formatter: YAHOO.widget.DataTable.preventTranslations
+            }
+        ];
+    <?php
+}
+
+if ($toPDF) {
+    ?>
+
+        var myDataSource = new YAHOO.util.DataSource(YAHOO.cfData.notesData);
+        myDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+        myDataSource.responseSchema = {
+            fields: DSflds
+        };
+
+        var myConfigs = {
+            draggableColumns:false,
+            sortedBy:{key:"subj", dir:"yui-dt-asc" },
+            dynamicData: false
+        };
+        var myDataTable = new YAHOO.widget.DataTable("dtNotesDiv", myColumnDefs,
+            myDataSource, myConfigs
+        );
+        myDataTable.render(document.body);
+
+    <?php
+} else {
+    ?>
+
+        var myDataSource = new YAHOO.util.XHRDataSource("<?php
+            echo $sitepath; ?>case/caseFolderPages/casenotes-ws.sec");
+        myDataSource.responseType = YAHOO.util.XHRDataSource.TYPE_JSON;
+        myDataSource.responseSchema = {
+            resultsList: "Response.Records",
+            fields: DSflds,
+            metaFields: {
+                totalRecords: "Response.Total",
+                rowsPerPage: "Response.RowsPerPage",
+                recordOffset: "Response.RecordOffset",
+                page: "Response.Page"
+            }
+        };
+
+        var myRequestBuilder = function(oState, oSelf)
+        {
+            <?php // Get states or use defaults ?>
+            oState = oState || {pagination:null, sortedBy:null};
+            var sort = (oState.sortedBy) ? oState.sortedBy.key : "fdesc";
+            var dir = (oState.sortedBy
+                && oState.sortedBy.dir == YAHOO.widget.DataTable.CLASS_DESC)
+                    ? "yui-dt-desc" : "yui-dt-asc";
+            var startIndex = (oState.pagination) ? oState.pagination.recordOffset : 0;
+            var results = (oState.pagination)
+                ? oState.pagination.rowsPerPage : <?php echo $recsPerPage?>;
+
+            <?php // Build custom request ?>
+
+            return  ("?si=" + startIndex + "&pp=" + results + "&ord=" + sort + "&dir=" + dir);
+        };
+
+        var myConfigs = {
+            draggableColumns:true,
+            sortedBy:{key:"<?php echo $orderBy?>", dir:"<?php echo $sortDir?>" },
+            paginator: new YAHOO.widget.Paginator({
+                alwaysVisible: false,
+                totalRecords: <?php echo $ttlRecs?>,
+                recordOffset: <?php echo $startIdx?>,
+                rowsPerPage: <?php echo $recsPerPage?>,
+                template: "{TotalRows} <span class=\"yui-pg-records\">Records</span> "
+                    + "<span class=\"yui-pg-extra\">Page</span> {CurrentPageReport} "
+                    + "{FirstPageLink} {PreviousPageLink} {PageLinks} {NextPageLink} "
+                    + "{LastPageLink} {RowsPerPageDropdown} "
+                    + "<span class=\"yui-pg-extra\">Records per Page</span>",
+                rowsPerPageOptions: [15,20,30,50,75,100],
+                pageLinks: 6
+            }),
+            initialRequest: "<?php echo "?si=$startIdx&pp=$recsPerPage"
+                . "&ord=$orderBy&dir=$sortDir"; ?>",
+            generateRequest: myRequestBuilder,
+            dynamicData: true
+        };
+        var myDataTable = new YAHOO.widget.DataTable("dtNotesDiv", myColumnDefs,
+            myDataSource, myConfigs
+        );
+
+        myDataTable.handleDataReturnPayload = function(oRequest, oResponse, oPayload)
+        {
+            var ttl, pp, si, li;
+            si = oResponse.meta.recordOffset;
+            pp = oResponse.meta.rowsPerPage;
+            ttl = oResponse.meta.totalRecords;
+            if (ttl == 0)
+                li = 0;
+            else if (si + pp <= ttl)
+                li = (si + pp) - 1;
+            else
+                li = ttl - 1;
+
+            oPayload.totalRecords = ttl;
+            oPayload.pagination.totalRecords = ttl;
+            oPayload.pagination.rowsPerPage = pp;
+            oPayload.pagination.recordOffset = si;
+            oPayload.pagination.records = [si,li];
+            oPayload.pagination.page = oResponse.meta.page;
+            return oPayload;
+        };
+        myDataTable.render(document.body);
+
+        var dtNotePick = function(oArg) {
+            var col = myDataTable.getColumn(oArg.target);
+            var rec = myDataTable.getRecord(oArg.target);
+            opRequest('note-show', rec.getData('dbid'));
+        };
+
+        <?php // Enable row highlighting ?>
+
+        myDataTable.subscribe("rowMouseoverEvent", myDataTable.onEventHighlightRow);
+        myDataTable.subscribe("rowMouseoutEvent", myDataTable.onEventUnhighlightRow);
+        myDataTable.subscribe("rowClickEvent", dtNotePick);
+
+        <?php // Turn off obnoxious "Loading..." message ?>
+
+        var catchLoading = function(oArg) {
+            if (oArg.className == "yui-dt-loading")
+                this.hideTableMessage();
+        };
+        myDataTable.on("tableMsgShowEvent", catchLoading);
+
+<?php
+}
+
+/*
+        var dsError = function(oArgs) {
+            alert('responseText: ' + oArgs.response.responseText);
+        };
+        myDataSource.subscribe('dataErrorEvent', dsError);
+*/
+?>
+
+        return {
+            oDS: myDataSource,
+            oDT: myDataTable
+        };
+    }();
+});
+
+<?php
+    if (!$toPDF) {
+        ?>
+
+        function dtNotesRefresh()
+        {
+        if (typeof dtNotesList == 'undefined' || dtNotesList == null)
+            return;
+        var DT = dtNotesList.oDT;
+        var oState = DT.getState();
+        var request = DT.get("generateRequest")(oState, DT);
+        var oCallback = {
+            success: function(oRequest, oResponse, oPayload) {
+                var newPayload = DT.handleDataReturnPayload(oRequest, oResponse, oPayload);
+                DT.onDataReturnSetRows(oRequest, oResponse, newPayload);
+            },
+            failure: function() {
+    <?php
+        if ($userType == SUPER_ADMIN) {
+            ?>
+                alert("Failed loading data.");
+        <?php
+        } else {
+            ?>
+                var a=1; <?php // do nothing ?>
+<?php
+        } ?>
+            },
+            argument: oState,
+            scope: DT };
+        dtNotesList.oDS.sendRequest(request, oCallback);
+        }
+
+    <?php
+    }
+?>
+
+</script>

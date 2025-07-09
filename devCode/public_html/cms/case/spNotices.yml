@@ -1,0 +1,17 @@
+addNote:
+  EMsubject: |
+    Note Added - Case Number: {caseNum}
+  EMbody: |
+    Dear {toName},
+
+    A new note has been added to your case:
+    Company: {company}
+    Case Number: {caseNum}
+    Case Name: {caseName}
+    Case Type: {caseType}
+    Link: {link}
+
+    Subject: {noteSubject}
+
+    Message:
+    {noteMessage}

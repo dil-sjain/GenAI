@@ -1,0 +1,287 @@
+<?php
+/**
+ * Corporate Document Attachment Upload Form
+ */
+require_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+if (!$session->value('IN_CASE_HOME')) {
+    exit;
+}
+require_once __DIR__ . '/../../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCaseAttach') || !$accCls->allow('addCaseAttach')) {
+    exit('Access denied');
+}
+require_once __DIR__ . '/../../includes/php/'.'funcs_log.php'; // includes class_db
+require_once __DIR__ . '/../../includes/php/'.'funcs_cases.php';
+require_once __DIR__ . '/../../includes/php/'.'funcs_clientfiles.php';
+$clientID = $_SESSION['clientID'];
+$caseID = $_SESSION['currentCaseID'];
+$docCategories = getClientDocumentCategories($clientID);
+$docCategoryList = '<select name="attachCat" data-no-trsl-cl-labels-sel="1"><option selected="selected">---</option>';
+if ($docCategories) {
+    foreach ($docCategories as $docCategory) {
+        foreach ($docCategory as $key => $value) {
+            if ($key == 'id') {
+                $catID = $value;
+            } elseif ($key == 'name') {
+                $catName = $value;
+            }
+        }
+        $docCategoryList .= '<option value="'.$catID.'">'.$catName.'</option>';
+    }
+}
+$docCategoryList .= '</select>';
+
+if (!($caseRow = fGetCaseRow($caseID))) {
+    exit;
+}
+
+$caseStage = $caseRow['caseStage'];
+$refreshDT = false;
+$closePbar = false;
+$success = false;
+$err = [];
+
+if (isset($_GET['fid'])
+    && ($fid = $_GET['fid'])
+    && preg_match('/^[a-f0-9]{32}$/', (string) $fid)
+    && is_array($_SESSION['uploads'][$fid])
+) {
+    $uploadFile = '/tmp/' . $_SESSION['uploads'][$fid]['filePrefix'] . 'upload';
+    $q_filesize = $fileSize = filesize($uploadFile);
+    // validate file type here
+    $e_filename = $_SESSION['uploads'][$fid]['e_filename'];
+    $q_category = $_SESSION['uploads'][$fid]['category'];
+    $e_describe = $_SESSION['uploads'][$fid]['e_description'];
+    $contents = file_get_contents($uploadFile);
+    $e_contents = ''; //$dbCls->escape_string($contents);
+    unset($contents);
+    $q_userid = $dbCls->escape_string($_SESSION['userid']);
+    $q_casestage = intval($caseStage);
+    $validUpload = validateUpload($e_filename, $uploadFile, 'casedoc');
+    if ($validUpload !== true) {
+        if (file_exists($uploadFile)) {
+            unlink($uploadFile);
+        }
+        $err[] = $validUpload;
+
+    } else {
+        $q_fileType = $dbCls->escape_string(
+            trim(
+                shell_exec(
+                    "/usr/bin/mimetype -bM \"$uploadFile\""
+                )
+            )
+        );
+        // insert new document
+        $sql = "INSERT INTO `subInfoAttach` (caseID, description, filename, fileType, fileSize, "
+            . "contents, ownerID, caseStage, catID, clientID ) VALUES ( '$caseID', '$e_describe', "
+            . "'$e_filename', '$q_fileType', '$q_filesize', '$e_contents', '$q_userid', "
+            . "$q_casestage, '$q_category', '$clientID' )";
+        ignore_user_abort(true);
+        $dbCls->query($sql);
+        if ($dbCls->affected_rows()) {
+            // store in filesystem, or delete db record on failure
+            $recID = $dbCls->insert_id();
+            if (moveUploadedClientFile($uploadFile, 'subInfoAttach', $clientID, $recID)) {
+                // log the event
+                logUserEvent(
+                    27, "`$e_filename' to case folder, description: `$e_describe`",
+                    $caseID
+                ); // Check the first single quote - doesn't match closing quote -Matt
+                $success = true;
+                $refreshDT = true;
+            } else {
+                // delete uploaded file
+                if (file_exists($uploadFile)) {
+                    unlink($uploadFile);
+                }
+                $e_recID = intval($recID);
+                $dbCls->query("DELETE FROM subInfoAttach WHERE id='$e_recID' LIMIT 1");
+                $err[] = 'Failed storing upload in filesystem.';
+            }
+        }
+    }
+    // clear session var
+    unset($_SESSION['uploads'][$fid]);
+    $closePbar = true;
+} // if upload completed
+
+
+require_once __DIR__ . '/../../includes/php/'.'Lib/SettingACL.php';
+$setting = (new SettingACL($clientID))->get(
+    SettingACL::MAX_UPLOAD_FILESIZE,
+    ['lookupOptions' => 'disabled']
+);
+$uplMax = ($setting) ? $setting['value'] : 10;
+
+$pageTitle = "Corporate Document Attachments";
+$reload = $sitepath . 'case/caseFolderPages/subinfo-attach-inline.sec';
+$insertInHead = <<<EOT
+
+<style type="text/css">
+body {
+margin: 0;
+padding:0;
+border:0px solid #fff;
+width:auto;
+height:auto;
+}
+.prmpt {
+    text-align: right;
+    font-weight: normal;
+    padding-right: .5em;
+}
+</style>
+<script type="text/javascript" src="/cms/js/inputValidation/XssValidation.js"></script>
+<script type="text/javascript">
+function doDone()
+{
+    parent.casedocUpl.setUploadForm('hide');
+}
+function strtrim (str)
+{
+    return str.replace(/^\s*/,'').replace(/\s*$/, '');
+}
+
+// Prevent submission with empty inputs
+function ckmissing(frm)
+{
+    if(strtrim(frm.upload.value).length == 0) {
+        parent.casedocUpl.showResult('Incomplete Information',
+            'Please select a file to upload.'
+        );
+    } else if(frm.attachCat.value == 'undefined' || frm.attachCat.value == 'NULL'
+        || frm.attachCat.value == '' || frm.attachCat.value == '---'
+    ) { // Extensive validation to please IE7 and the rest of technology
+        parent.casedocUpl.showResult('Incomplete Information',
+            'Please choose a category of the document you are uploading.'
+        );
+    } else if(strtrim(frm.attachDesc.value).length == 0) {
+        parent.casedocUpl.showResult('Incomplete Information',
+            'Please enter a brief description of the document you are uploading.'
+        );
+    } else if (!validateXSS(frm.attachDesc.value)) {
+        parent.casedocUpl.showResult('Invalid Description',
+            'Description contains unsafe HTML, JavaScript, or other unsafe content.' 
+    );
+    } else {
+        var reg = YAHOO.util.Dom.getRegion('uplform-ctnr');
+        parent.casedocUpl.formWidth = reg.width;
+        parent.casedocUpl.formHeight = reg.height;
+        parent.casedocUpl.opRequest('upl-init', frm.upload.value, frm.attachDesc.value,
+            frm.attachCat.value);
+    }
+    return false;
+}
+
+window.doSubmit = function(fid)
+{
+    var frm = document.uplform;
+    frm.action = '/util/uploadfile?fid=' + fid + '&ms={$uplMax}';
+    frm.submit();
+};
+window.doReload = function()
+{
+    window.location='$reload';
+};
+
+</script>
+
+EOT;
+
+
+$loadYUImodules = ['cmsutil', 'button'];
+noShellHead(true);
+$_SESSION['casedocPgAuth'] = PageAuth::genToken('casedocPgAuth');
+?>
+<!-- Start IFrame Content-->
+<div id="uplform-ctnr" style="padding:1.5em; border: 1px solid #ccc">
+
+<form name="uplform"
+    onsubmit="return ckmissing(this);"
+    class="cmsform"
+    enctype="multipart/form-data"
+    action="/cms/case/caseFolderPages/subinfo-attach-inline.sec"
+    method="post">
+
+<table cellpadding="3" cellspacing="0" width="480" border="0">
+<tr>
+  <td><div class="prmpt">Choose file:</div></td>
+  <td>
+    <input type="file" name="upload" />
+  </td>
+</tr>
+<tr>
+  <td><div class="prmpt">Choose category:</div></td>
+  <td>
+<?php echo $docCategoryList; ?>
+  </td>
+</tr>
+<tr>
+  <td valign="top"><div class="prmpt">Provide a description of the document
+      you are uploading:</div></td>
+  <td><textarea name="attachDesc" wrap="soft" style="width:300px;height:75px;"
+      cols="40" rows="5" class="no-trsl"></textarea></td>
+</tr>
+<tr>
+  <td><div class="no-wrap fw-normal ta-right marg-rtsm">File size limit <?php echo $uplMax; ?>MB</div></td>
+  <td>
+    <input id="uplSub" class="v-hidden" name="uplSub" type="submit" value="Upload" />
+    <input id="uplDone" class="v-hidden" type="button" value="Close" onclick="doDone()" />
+  </td>
+</tr>
+</table>
+
+</form>
+</div>
+
+<!-- End IFrame Content -->
+
+<script type="text/javascript">
+
+<?php
+if ($refreshDT) {
+    echo "parent.dtDocsRefresh();\n";
+}
+if ($closePbar) {
+    echo "parent.casedocUpl.closePbar();\n";
+}
+if (count($err)) {
+    $msg = (count($err) == 1) ? 'An error occurred:' : (count($err) . ' errors occurred:');
+    $msg .= "\\n<ul>\\n";
+    foreach ($err as $e) {
+        $msg .= "<li>$e</li>\\n";
+    }
+    $msg .= '</ul>';
+    echo "parent.casedocUpl.showResult('Upload Failed', \"$msg\");\n";
+}
+?>
+
+(function(){
+
+    <?php // Update button ?>
+    var uplSubBtn = new YAHOO.widget.Button("uplSub", {
+        id: "uplSubBtn-yui",
+        label: "Upload",
+        type: "submit"
+    });
+
+    <?php // Close button ?>
+    var uplDoneBtn = new YAHOO.widget.Button("uplDone", {
+        id: "upldoneBtn-yui",
+        label: "Close",
+        type: "button"
+    });
+    uplDoneBtn.on('click', function(){
+        doDone();
+    });
+
+})();
+
+</script>
+
+<?php
+noShellFoot(true);
+?>

@@ -1,0 +1,462 @@
+<?php
+/**
+ * Case Management dispatcher
+ *
+ * CS compliance: grh - 08/19/2012
+ */
+define('isCaseTab', 1);
+require_once __DIR__ . '/../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+require_once __DIR__ . '/../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCaseMng')) {
+    exit('Invalid Access!');
+}
+
+$debugPDF = false;
+//$debugPDF = true; // exposes pdfFrame iframe (for SUPER_ADMIN, in shell_footer.php)
+
+require_once __DIR__ . '/../includes/php/'.'funcs.php';
+require_once __DIR__ . '/../includes/php/'.'class_db.php';
+require_once __DIR__ . '/../includes/php/'.'class_popdate.php';
+require_once __DIR__ . '/../includes/php/'.'funcs_users.php';
+
+$hasUberSearch = false;
+$trText = $accCls->trans->group('tabs_case');
+
+// custom data uses these var to identify its context
+$session->un_set('IN_TP_HOME');
+$session->set('IN_CASE_HOME', true);
+$b3pAccess = (isset($_SESSION['b3pAccess']) && $_SESSION['b3pAccess']);
+
+// If Case Stages and Description haven't already been loaded, lets do it
+if (!isset($_SESSION['caseStageList'])) {
+    $_SESSION['caseStageList'] = fLoadCaseStageList();
+}
+
+// If Case Type and Description haven't already been loaded, lets do it
+if (!isset($_SESSION['caseTypeList'])) {
+    $_SESSION['caseTypeList'] = fLoadCaseTypeList();
+}
+
+$userType = $_SESSION['userType'];
+$userClass = $session->secure_value('userClass');
+
+// Vendor Specific Code
+if ($userClass == 'vendor') {
+    if (isset($_GET['icli'])) {
+        $_SESSION['clientID'] = intval($_GET['icli']);
+    }
+} elseif (!$b3pAccess) {
+    $sql = "SELECT tenantID FROM " . REAL_GLOBAL_DB . ".g_multiTenantAccess\n"
+        . "WHERE tenantID = '" . $_SESSION['clientID'] . "' LIMIT 1";
+    $hasUberSearch = ($dbCls->fetchValue($sql) == $_SESSION['clientID']);
+}
+
+if (!$accCls->allowIfRedirect($_SERVER['REQUEST_URI'], $session, $userClass)) {
+    exit('Invalid request for application instance!');
+}
+
+$CPid = $_SESSION['clientID'];
+
+// Set Case List filter source
+$clearSessVars = [];
+$initSearch = false;
+if (isset($_POST['gsrchSB-auth']) || isset($_GET['gsrchSB-auth'])) {
+    $_SESSION['caseFilterSrc'] = 'SB';
+    $initSearch = true;
+} elseif (isset($_POST['gsrchAF-auth'])) {
+    $_SESSION['caseFilterSrc'] = 'AF';
+    $initSearch = true;
+} elseif (isset($_POST['gsrchCL-auth'])) {
+    $_SESSION['caseFilterSrc'] = 'CL';
+} else {
+    if (!isset($_SESSION['caseFilterSrc'])) {
+        $_SESSION['caseFilterSrc'] = 'CL';
+    }
+}
+
+$clearSessVars[] = 'modalReturnPath';
+$clearSessVars[] = 'ddqID';
+
+foreach ($clearSessVars AS $k) {
+    if (isset($_SESSION[$k])) {
+        unset($_SESSION[$k]);
+    }
+}
+
+
+$dbCls->open('', false);
+
+// Is there an active/valid case for case folder?
+$caseID = 0;
+if (!$initSearch) {
+    if (isset($_GET['id'])) {
+        $caseID = intval($_GET['id']);
+    } elseif (isset($_GET['cref'])) {
+        $e_cref = $dbCls->esc($_GET['cref']);
+        $sql = "SELECT id FROM cases WHERE userCaseNum = '$e_cref' "
+            . "AND clientID = '{$_SESSION['clientID']}' LIMIT 1";
+        if ($caseID = $dbCls->fetchValue($sql)) {
+            $_GET['id'] = $caseID; // for backward compatability
+        }
+    } elseif (isset($_SESSION['currentCaseID'])) {
+        $caseID = $_SESSION['currentCaseID'];
+        if ($caseID) {
+            $_GET['id'] = $caseID; // for backward compatability
+        }
+    }
+}
+
+$e_caseID = intval($caseID);
+$e_CPid = intval($CPid);
+if ($caseID) {
+    if ($caseID == $dbCls->fetchValue("SELECT id FROM cases "
+        . "WHERE id = '$e_caseID' AND clientID = '$e_CPid' LIMIT 1"
+    )) {
+        $_SESSION['currentCaseID'] = $caseID;
+    } else {
+        unset($_SESSION['currentCaseID']);
+        $caseID = 0;
+    }
+} else {
+    unset($_SESSION['currentCaseID']);
+}
+
+require_once __DIR__ . '/../includes/php/'.'class_yuitabs.php';
+$tabs = new yuiTabs('cmTabs', 'caseFunctionBar', 'CaseListDefTab', 'navSync.CaseMgt');
+$tabs->addTab(
+    'caselist',
+    $trText['tab_Case_List'],
+    'case/caselist-json.php'
+);
+if ($caseID) {
+    $tabs->addTab(
+        'casefolder',
+        $trText['tab_Case_Folder'],
+        'case/loadcase.php'
+    );
+}
+if ($hasUberSearch) {
+    $tabs->addTab(
+        'uberSearchCase',
+        $trText['tab_Uber_Search'],
+        'delta:/navredir/tpm/case/uber'
+    );
+}
+
+if (isset($_GET['tname'])) {
+    $tabs->activeTab = $tabs->getTabNumByName($_GET['tname']);
+} else {
+    $tabs->findActiveTab();
+}
+$_SESSION['caseListReturnPg'] = $tabs->tabs[$tabs->activeTab]->returnPg;
+$activeTabName = $tabs->tabs[$tabs->activeTab]->name;
+//$enableWaitSpinner = (SECURIMATE_ENV == 'Development');
+$enableWaitSpinner = true;
+if ($enableWaitSpinner && $activeTabName == 'caselist') {
+    include_once __DIR__ . '/../includes/php/'.'class_waitspin.php';
+    $waitSpin = WaitSpin::headJs(16, 'waitspinDiv');
+} else {
+    $waitSpin = '';
+}
+
+// Only Prev/Next buttons if in Case Folder tab
+if ($activeTabName == 'casefolder') {
+    // Check if swtch session is set. If set make sure current case is in swtch list. If not clear swtch session list.
+    if (isset($_SESSION['swtch']) && !in_array($caseID, $_SESSION['swtch'])) {
+        unset($_SESSION['swtch']);
+    }
+
+    // Check if a new swtch list is passed in. If so, update list in session.
+    if (isset($_GET['swtch']) && !empty($_GET['swtch'])) {
+        $swtch = array_map('intval', explode(',', (string) $_GET['swtch']));
+        $_SESSION['swtch'] = $swtch;
+    }
+
+    // Use current swtch session values to build button links
+    if (isset($_SESSION['swtch'])) {
+        $swtch = $_SESSION['swtch'];
+        $swtchPrev = 0;
+        $swtchNext = 0;
+        if (count($swtch) > 1) {
+            foreach ($swtch as $k => $v) {
+                if ($v === $caseID) {
+                    // Set case for back button
+                    if ($k == 0) {
+                        $swtchPrev = $swtch[count($swtch) - 1];
+                    } else {
+                        $swtchPrev = $swtch[$k - 1];
+                    }
+
+                    // Set case for next button
+                    if ($k >= (count($swtch) - 1)) {
+                        $swtchNext = $swtch[0];
+                    } else {
+                        $swtchNext = $swtch[$k + 1];
+                    }
+                    break;
+                }
+            }
+        } else {
+            unset($swtchNext, $swtchPrev);
+        }
+    }
+}
+
+// <style> tag belongs in <head>. shell_head closes <head> tag.  So... we echo.
+$extraStyles = <<<EOT
+
+<style type="text/css">
+
+#mainContent {
+    position: relative;
+}
+
+#cmTabs .yui-content {
+    background-color:#fff;
+    border:0;
+    padding:0;
+    margin:0;
+}
+
+.yui-skin-sam .yui-dt .yui-dt-data .yui-dt-liner {
+    width:95%;
+    padding: 4px 10px 4px 6px;
+}
+.yui-skin-sam .yui-dt .yui-dt-data td {
+    padding-right:0;overflow:hidden;
+}
+.yui-skin-sam .yui-dt td.yui-dt-col-fsize {
+    margin:0;
+    padding-right:.5em;
+}
+.yui-skin-sam .yui-dt td.yui-dt-col-fsize div.yui-dt-liner {
+    margin:0;
+    padding:0;
+    text-align:right;
+}
+
+#demo ul {
+    margin: 0pt;
+}
+#demo .yui-content, #subdemo .yui-content {
+    background-color:#fff;
+    padding:0;
+    margin:0;
+}
+#demo .yui-content {
+    height: 300%;
+    border:0;
+}
+#subdemo .yui-content {
+    height: 200%;
+    border: 1px solid #ccc;
+}
+
+#subdemo #myTable td {
+    border: 1px solid #cccccc;
+}
+#casesTbl, #casesTblSearch {
+    min-width: 788px;
+    width:788px;
+}
+
+.yui-skin-sam .yui-log {
+    font-size:110%;
+}
+.yui-dt-col-tpID {
+    background-position: center center;
+    background-repeat: no-repeat;
+}
+
+.yui-dt-col-fname {
+    white-space:nowrap;
+    overflow:hidden;
+    padding-right:5px;
+    max-width:200px;
+    width:200px;
+    max-height:20px;
+    height:20px;
+}
+
+.yui-dt-col-fname .yui-dt-liner {
+    max-width:195px;
+    width:195px;
+    white-space:nowrap;
+    overflow:hidden;
+}
+div.cfConflictAlert {
+  font-size: 12pt;
+  font-weight: bold;
+  padding: 10px 7px;
+  margin-bottom: 3px;
+  background-color: white;
+  color: black;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+div.cfConflictAlert >span.warn {
+  display: inline-block;
+  padding: 6px 10px;
+  margin-left: 0.7em;
+  color: black;
+  background-color: #EAA14B;
+  border: 1px solid #EAA14B;
+  border-radius: 5px;
+}
+</style>
+
+
+$waitSpin
+
+EOT;
+
+$popDate = new popDateClass();
+
+$pageTitle = "Case Management";
+
+// Load YUI modules
+if (basename($tabs->getContentSrcName()) == 'loadcase.php') {
+    $mods = ['cmsutil', 'tabview', 'dispatcher', 'button', 'paginator', 'datasource', 'json', 'datatable', 'calendar', 'inlinehelp', 'linkedselects'];
+    if ($userClass == 'vendor') {
+        $mods[] = 'iframepanel';
+    }
+} else {
+    $mods = ['cmsutil', 'tabview', 'dispatcher', 'button', 'paginator', 'datasource', 'json', 'datatable'];
+}
+$loadYUImodules = $mods;
+
+$tabs->putInHeadTag($extraStyles);
+
+if (!isset($insertInHead)) {
+    $insertInHead = '';
+}
+$insertInHead .= <<<EOT
+<link rel="stylesheet" type="text/css" href="/cms/css/dynddq.css" media="screen" />
+
+EOT;
+
+shell_head();
+echo $popDate->preJs();
+
+?>
+<script type="text/javascript">
+
+var srdReady = false;
+
+YAHOO.namespace('add3p');
+YAHOO.add3p.panelReady = false;
+
+<?php
+if ($accCls->allow('acc3pMng')
+    && $accCls->allow('add3pProfile')
+    && $accCls->allow('assoc3p')
+) {
+    ?>
+    function assoc3pProfile(caller, caseID)
+    {
+        if (!YAHOO.add3p.panelReady) {
+            return false;
+        }
+        return YAHOO.add3p.assocProfile(caller, caseID);
+    }
+    <?php
+} ?>
+
+function showResultDiag(headHTML, bodyHTML)
+{
+    if (!srdReady) {
+        return;
+    }
+    if (!resultDiag.rendered) {
+        resultDiag.rendered = true;
+        resultDiag.render(document.body);
+    }
+    resultDiag.setHeader(headHTML);
+    resultDiag.setBody(bodyHTML);
+    resultDiag.show();
+}
+
+function multiError(title, msgArray){
+    if (title.length && msgArray.length) {
+        var i, msg;
+        if (YAHOO.lang.isArray(msgArray)) {
+            if (msgArray.length == 1) {
+                msg = '<b>There was an error</b>:<ul>';
+            } else {
+                msg = '<b>The following errors occurred</b>:<ul>';
+            }
+            for (i in msgArray) {
+                msg += '<li>' + msgArray[i] + '</li>';
+            }
+            msg += '</ul>';
+        } else {
+            msg = msgArray;
+        }
+        showResultDiag(title, msg);
+    }
+}
+
+YAHOO.util.Event.onDOMReady(function(o)
+{
+    resultDiag = new YAHOO.widget.SimpleDialog("result-dlg", {
+        width: "300px",
+        fixedcenter: "contained",
+        visible: false,
+        modal: true,
+        draggable: true,
+        close: false,
+        constraintoviewport: false,
+        buttons: [ { text:"Ok", handler: function()
+                     {
+                         this.hide();
+                     }, isDefaut:true }
+                 ]
+    });
+    resultDiag.rendered = false;
+    srdReady = true;
+});
+</script>
+
+<?php
+if (isset($_SESSION['swtch']) && isset($swtchNext) && isset($swtchPrev)) {
+    $accCls = UserAccess::getInstance();
+    $trNav  = $accCls->trans->codeKeys(['nav_prev', 'nav_next']);
+?>
+<style type="text/css">
+    .swtch {
+        display: inline;
+        position: absolute;
+        top: 9px;
+        right: 10px;
+        z-index: 10;
+        background-color: #f9f9f9;
+    }
+    .swtch-link {
+        display: inline-block;
+        padding: 8px 15px;
+    }
+</style>
+    <div id="waitspinDiv"></div>
+    <div class="swtch">
+        <a class="swtch-link" href="/cms/case/casehome.sec?id=<?= $swtchPrev ?>&tname=casefolder">
+            <?= $trNav['nav_prev'] ?></a>
+        -
+        <a class="swtch-link" href="/cms/case/casehome.sec?id=<?= $swtchNext ?>&tname=casefolder">
+            <?= $trNav['nav_next'] ?></a>
+    </div>
+<?php
+}
+
+// Output the TabView
+
+$tabs->outputPreContent();
+require $tabs->getContentSrcName();
+$tabs->outputPostContent($_SERVER['PHP_SELF']);
+
+if ($b3pAccess) {
+    include_once __DIR__ . '/../includes/php/'.'add3p.php';
+}
+echo $popDate->postJs();
+shell_foot();

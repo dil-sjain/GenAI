@@ -1,0 +1,354 @@
+<?php
+/**
+ * AJAX handler Multiple Case Assignment (multi-assign.sec)
+ *
+ * File expects a valid auth token, as well as an 'op' specified.
+ * File has been expanded in functionality, originally it did item #1 below, later is was enhanced to do item #2
+ *     1) sets up background process (multiAssignCases) when data is passed, and then monitors to completion.
+ *     2) provides the ability to change multiple case(s) stage to ACCEPTED_BY_INVESTIGATOR
+ *
+ * @keywords multi assign, multi-assign, multiAssignCases
+ * @author Luke
+ */
+
+if (!isset($_POST['op'])) {
+    return;
+}
+require_once __DIR__ . '/../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+$useWsSecurity = true;
+require_once __DIR__ . '/../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+$paResult = true;
+if ($useWsSecurity) {
+    if (isset($_POST['caseAssignAuth'])) {
+        $paResult = PageAuth::validToken('caseAssignAuth', $_POST['caseAssignAuth']);
+    } else {
+        $paResult = false;
+    }
+}
+if ($_SESSION['userType'] != VENDOR_ADMIN) {
+    exit('Access denied.');
+}
+
+if (isset($_SESSION['b3pAccess']) && $_SESSION['b3pAccess']) {
+    include_once __DIR__ . '/../includes/php/funcs_thirdparty.php';
+}
+
+if (!isset($_SESSION['id']) || intval($_SESSION['id']) == 0) {
+    return;
+}
+
+require_once __DIR__ . '/../includes/php/'.'funcs_users.php';
+require_once __DIR__ . '/../includes/php/'.'funcs_misc.php';
+require_once __DIR__ . '/../includes/php/'.'class_search.php';
+require_once __DIR__ . '/../includes/php/'.'class_db.php';
+
+require_once __DIR__ . '/../includes/php/'.'class_BgProcessData.php';
+
+$clientID = $_SESSION['clientID'];
+$globaldb = GLOBAL_DB;
+$sp_globaldb   = GLOBAL_SP_DB;
+$real_globaldb = REAL_GLOBAL_DB;
+
+//devDebug($_POST, '_POST');
+
+$jsData = '{}';
+$jsObj = new stdClass();
+$jsObj->Result = 0;
+$jsObj->PageAuthResult = intval($paResult);
+
+// Dispatcher
+if ($paResult) {
+    switch ($_POST['op']) {
+    case 'goInv':
+        $jsObj = maLoc_initiateJob($jsObj, $dbCls);
+        break;
+    case 'acc':
+        $jsObj = maLoc_updateStage($jsObj, $dbCls);
+        break;
+    case 'monitor':
+        $jobID = (!empty($_POST['jid']) && is_numeric($_POST['jid'])) ? (int)$_POST['jid'] : false;
+        $jsObj = maLoc_monitorJob($jobID, $jsObj, $dbCls);
+        break;
+    default:
+        $jsObj->Result = 0;
+        $jsObj->errTitle = '';
+        $jsObj->errMsg = '';
+    } // dispatcher
+}
+
+// Override normal headers to values more favorable to a JSON return value
+header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+header("Last-Modified: " . gmdate("D, d M Y H:i:s") . "GMT");
+header("Cache-Control: no-cache, must-revalidate");
+header("Pragma: no-cache");
+header("Content-Type: text/plain; charset=utf-8"); //JSON
+
+if ($useWsSecurity) {
+    $jsObj->caseAssignAuth = PageAuth::genToken('caseAssignAuth');
+}
+$jsData = json_encodeLF($jsObj);
+//devDebug($jsData, 'jsData');
+
+echo $jsData;
+
+
+/********************
+*  Local Functions  *
+********************/
+
+/**
+ * Monitor an ongoing batch process.
+ *
+ * @param int    $jobID ID of job to monitor (bgProcess id)
+ * @param object $jsObj Object of values which will be returned to the calling script.
+ * @param object $dbCls Instance of the db class
+ *
+ * @return object Modified jsObj for return to calling script.
+ */
+function maLoc_monitorJob($jobID, $jsObj, $dbCls)
+{
+    $bgData = new BgProcessData;
+    $jobID = (int)$jobID;
+    $jsObj->jobID = $jobID;
+
+    $getFields = ['status', 'recordsToProcess', 'recordsCompleted', 'stats'];
+    $job = $bgData->getJobValues($jobID, $getFields);
+
+    if (!$job) {
+        $jsObj->Result = 0;
+        $jsObj->errTitle = 'Error Processing Request';
+        $jsObj->errMsg = 'The batch processing job does not exist.';
+        $jsObj->ReturnOp = 'goInv';
+        return $jsObj;
+    }
+
+    $jsObj->Result = 1;
+
+    if ($job->status == 'completed') {
+        $stats = unserialize($job->stats);
+
+        $jsObj->AllFmt = number_format(floatval($job->recordsToProcess), 0);
+        $jsObj->DoneFmt = number_format(floatval($job->recordsCompleted), 0);
+        $jsObj->Complete = 1;
+        $jsObj->Percent = 1;
+        $jsObj->AfterBgOp = 'goInv';
+        $jsObj->rtnIds = $stats['rtnIds'];
+    } else {
+        $jsObj->AllFmt = number_format(floatval($job->recordsToProcess), 0);
+        $jsObj->DoneFmt = number_format(floatval($job->recordsCompleted), 0);
+        $jsObj->Percent = number_format(
+            floatval($job->recordsCompleted / $job->recordsToProcess), 2
+        );
+        $jsObj->ReturnOp = 'monitor';
+        $jsObj->Complete = 0;
+    }
+
+    return $jsObj;
+} // end maLoc_monitorJob();
+
+/**
+ * Update stage to Accepted by Investigator.
+ *
+ * @param object $jsObj Object of values which will be returned to the calling script.
+ * @param object $dbCls Instance of the db class
+ *
+ * @return object Modified jsObj for return to calling script.
+ */
+function maLoc_updateStage($jsObj, $dbCls)
+{
+    $totalRec = (int)$_POST['ttlCk'];
+    $jsObj->Result = 0;
+
+    $toDo = $_POST;
+    unset($toDo['op'], $toDo['caseAssignAuth'], $toDo['invID'], $toDo['ttlCk'], $toDo['ckids']);
+    $numToDo = count($toDo);
+    if ($numToDo < 1) {
+        $jsObj->err++;
+        $jsObj->errMsg .= '- No cases were selected.';
+    }
+
+    if (array_key_exists('ckids', $_POST)) {
+        if (is_numeric($_POST['ckids'])) {
+            // handle single value;
+            $rtnIds[0] = (int)$_POST['ckids'];
+        } else {
+            $ids = explode(',', (string) $_POST['ckids']);
+            $rtnIds = [];
+            $x = 0;
+            foreach ($ids as $id) {
+                $rtnIds[$x] = (int)$id;
+                $x++;
+            }
+        }
+    }
+
+        for ($i=0;$i<$totalRec;$i++) {
+            $tmp = explode(':', (string) $toDo['ck'. $i]);
+            // clientID
+            $clID = (int)$tmp[0];
+            $eClID = $dbCls->escape_string($clID);
+            // caseID
+            $csID = (int)$tmp[1];
+            $eCsID = $dbCls->escape_string($csID);
+            $eAccInv = ACCEPTED_BY_INVESTIGATOR;
+            $clientDB = $dbCls->clientDBname($clID);
+
+            $sql = "SELECT caseInvestigatorUserID FROM {$clientDB}.cases"
+                . " WHERE clientID = '$eClID' AND id = '$eCsID'";
+            $casInvID = $dbCls->fetchValue($sql);
+
+            if($casInvID == 0){
+                $jsObj->err++;
+                $jsObj->errMsg .= 'Case must be assigned to investigator first';
+            } else {
+                $sql = "UPDATE {$clientDB}.cases SET caseStage = $eAccInv, caseAcceptedByInvestigator = NOW() "
+                    . " WHERE clientID = '$eClID' AND id = '$eCsID' LIMIT 1";
+                if ($dbCls->query($sql)){
+                    $jsObj->Result = 1;
+                }
+            }
+        };
+    $jsObj->casesChanged = $i;
+
+    return $jsObj;
+} // end maLoc_updateStage($jsObj, $dbCls);
+
+/**
+ * Setup a background process.
+ *
+ * @param object $jsObj Object of values which will be returned to the calling script.
+ * @param object $dbCls Instance of the db class
+ *
+ * @return object Modified jsObj for return to calling script.
+ */
+function maLoc_initiateJob($jsObj, $dbCls)
+{
+    $bgData = new BgProcessData;
+
+    // clean up post vars.
+    $totalRec = (int)$_POST['ttlCk'];
+    $investigatorID = (int)$_POST['invID'];
+
+    // initial return values; assume the worst, then improve.
+    $jsObj->Result = 0;
+    $jsObj->invID = $investigatorID;
+    $jsObj->ReturnOp = 'goInv';
+
+    $devDebug = false; // set false to push bg process output to /dev/null, true for log file.
+    $toDo = $_POST;
+    unset($toDo['op'], $toDo['caseAssignAuth'], $toDo['invID'], $toDo['ttlCk'], $toDo['ckids']);
+    $numToDo = count($toDo);
+
+    // run validation checks, to make sure we're still good.
+    $err = 0;
+    $errMsg = '';
+    // let's see if this investigator exists, and is even allowed under this SP.
+    $invOK = $dbCls->fetchValue("SELECT id FROM ". GLOBAL_DB .".users "
+        ."WHERE vendorID = ".intval($_SESSION['vendorID']) ." "
+            ."AND id = ". intval($investigatorID) ." "
+            ."AND (status = 'active' OR status = 'pending') "
+        ."LIMIT 1"
+    );
+
+    if (!$invOK) {
+        $err++;
+        $errMsg .= '- Invalid investigator selected.<br />';
+    }
+
+    if ($numToDo < 1) {
+        $err++;
+        $errMsg .= '- No cases were selected.';
+    }
+
+    // setup checked id's so they can be turned back on if we need to return them.
+    if (array_key_exists('ckids', $_POST)) {
+        if (is_numeric($_POST['ckids'])) {
+            // handle single value;
+            $rtnIds[0] = (int)$_POST['ckids'];
+        } else {
+            $ids = explode(',', (string) $_POST['ckids']);
+            $rtnIds = [];
+            $x = 0;
+            foreach ($ids as $id) {
+                $rtnIds[$x] = (int)$id;
+                $x++;
+            }
+        }
+        $jsObj->rtnIds = $rtnIds;
+    }
+
+    if ($err > 0) {
+        $jsObj->Result = 0;
+        $jsObj->errTitle = 'Invalid Operation Event';
+        $jsObj->errMsg = $errMsg;
+        return $jsObj;
+    }
+
+    if ($totalRec != $numToDo) {
+        $totalRec = $numToDo;
+    }
+
+    // create data array by client ID.
+    $data = [];
+    for ($i=0;$i<$totalRec;$i++) {
+        $tmp = explode(':', (string) $toDo['ck'. $i]);
+        // clientID
+        $clID = (int)$tmp[0];
+        // caseID
+        $csID = (int)$tmp[1];
+        // old investigator (for logging)
+        $oldInv = (empty($tmp[2])) ? 'Unassigned' : html_entity_decode($tmp[2]);
+        // use clientID => caseID = oldInvestigator to prevent potential duplicates.
+        $data[$clID][$csID] = $oldInv;
+    }
+
+    $userID = (int)$_SESSION['id'];
+    $spID = (int)$_SESSION['vendorID'];
+
+    // setup initial bgProcess values.
+    $stats = ['userID' => $userID, 'spID'   => $spID, 'invID'  => $investigatorID, 'rtnIds' => $rtnIds, 'debug'  => (($devDebug == true) ? 1:0), 'data'   => $data];
+
+    $newData = ['userID' => $userID, 'spID'   => $spID, 'jobType' => 'multiAssignCases', 'status'  => 'scheduled', 'recordsToProcess' => $totalRec, 'recordsCompleted' => 0, 'stats' => $stats];
+    $clientID = 0;
+
+    $jobID = $bgData->createProcess($clientID, $userID, $newData);
+
+    if ($jobID) {
+        $logDir = '/var/local/adminData/' . SECURIMATE_ENV . '/multiAssignCases';
+        if ((!is_dir($logDir) && !mkdir($logDir)) || $devDebug == false) {
+            $logFile = '/dev/null';
+        } else {
+            $logFile = $logDir .'/'. 'job_'. $jobID .'.log';
+            $bgData->updateProcessRecord($jobID, $clientID, $userID, ['jobFiles' => [$logFile]]);
+        }
+
+        $jsObj->jobID = $jobID;
+        $e_logFile = escapeshellarg($logFile);
+        $phpcli = '/usr/bin/php';
+        $prog = $_SERVER['DOCUMENT_ROOT'] .'/cms/includes/php/cli/multiAssignCases.php';
+        $cmd = "/usr/bin/nohup $phpcli -f $prog -- $jobID > $e_logFile 2>&1 &";
+        ignore_user_abort(true);
+        $execRtn = 0;
+        $execOutput = [];
+        exec($cmd, $execOutput, $execRtn);
+        if ($execOutput || $execRtn) {
+            $jsObj->errTitle = 'Initialization Error';
+            $jsObj->errMsg = 'Unable to start the background process.';
+            $jsObj->invID = $investigatorID;
+        } else {
+            $jsObj->Result = 1;
+            $jsObj->AllFmt = $totalRec;
+            $jsObj->DoneFmt = 0;
+            $jsObj->Percent = 0;
+            $jsObj->ReturnOp = 'monitor';
+            sleep(1);
+        }
+    } else {
+        $jsObj->errTitle = 'Initialization Error';
+        $jsObj->errMsg = 'Unable to create the background process entry.';
+    }
+
+    return $jsObj;
+} // end maLoc_initiateJob();

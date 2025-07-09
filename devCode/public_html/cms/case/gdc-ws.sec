@@ -1,0 +1,1540 @@
+<?php
+/**
+ * AJAX handler for client-facing GDC interface
+ */
+
+require_once __DIR__ . '/../includes/php/cms_defs.php';
+$session->cms_logged_in(true, -1);
+$useWsSecurity = true;
+require_once __DIR__ . '/../includes/php/class_access.php';
+require_once __DIR__.'/../../../app/Lib/Support/ForkProcess.php';
+$accCls = UserAccess::getInstance();
+
+if (!$session->value('IN_CASE_HOME')
+    || $session->secure_value('userClass') != 'vendor'
+    || !isset($_SESSION['currentCaseID'])
+    || !($caseID = $_SESSION['currentCaseID'])
+    || !$accCls->allow('accCaseMng')
+    || ($useWsSecurity && (!isset($_POST['gdcReviewAuth'])
+    || !PageAuth::validToken('gdcReviewAuth', $_POST['gdcReviewAuth'])))
+) {
+    exit('Access denied');
+}
+
+
+require_once __DIR__ . '/../includes/php/class_gdc.php';
+require_once __DIR__ . '/../includes/php/funcs_misc.php';
+require_once __DIR__ . '/../includes/php/Lib/Database/MySqlPdo.php';
+require_once __DIR__ . '/../includes/php/Models/Globals/Features/TenantFeatures.php';
+require_once __DIR__ . '/../includes/php/Models/TPM/TpQueue.php';
+
+$jsData = '{}';
+$jsObj = new stdClass();
+$jsObj->Result = 0;
+$jsObj->ErrorTitle = '';
+$jsObj->ErrorMsg = '';
+
+$e_clientID = $clientID = $_SESSION['clientID'];
+$e_spID = $spID = $_SESSION['vendorID'];
+$e_caseID = intval($caseID);
+$sessKey  = 'activeGdcOp';
+$globaldb = GLOBAL_DB;
+$real_globaldb = REAL_GLOBAL_DB;
+$spdb = GLOBAL_SP_DB;
+$e_userID = $userID = $_SESSION['id'];
+$PDO = new MySqlPdo(['clientID' => $e_clientID]);
+$tpQueue = new TpQueue($clientID);
+
+// Is Media Monitor enabled for the given case's tenant?
+$mmEnabled = (($tf = (new TenantFeatures($clientID))->tenantHasFeatures([Feature::TENANT_MEDIA_MONITOR], FEATURE::APP_TPM)) && !empty($tf[Feature::TENANT_MEDIA_MONITOR]));
+
+if ($mmEnabled) {
+    include_once __DIR__ . '/../includes/php/Models/TPM/MediaMonitor/MediaMonitorData.php';
+    $mmModel = new MediaMonitorData($e_clientID, $e_spID);
+}
+
+// Get the thirdPartyProfile.id of the tenant owning the case
+$clientRef = getTenantDetailsFromCase($e_caseID);
+$_SESSION['currentThirdPartyID'] = $currentThirdPartyID = (int)$clientRef['tpID'];
+
+$tf = (new TenantFeatures($clientID))->tenantHasFeatures([Feature::AI_SUMMARISATION], FEATURE::APP_TPM);
+// feature flag for aiSummary
+$aiSummaryEnabled = (filter_var(getenv("AI_SUMMARY_ENABLED"), FILTER_VALIDATE_BOOLEAN) && !empty($tf[Feature::AI_SUMMARISATION]));
+
+//devDebug($_POST);
+
+// Dispatcher
+$op = $_POST['op'];
+switch ($op) {
+case 'prep-name':
+    $oFirst = $first = trim((string) $_POST['fi']);
+    $oLast = $last = trim((string) $_POST['la']);
+    $oFull = $full = trim((string) $_POST['fu']);
+    $eType = ($_POST['et'] == 'P') ? 'P': 'E';
+    include_once __DIR__ . '/../includes/php/class_gdccase.php';
+    $gdc = new GdcCase($caseID, $clientID);
+    $first = Gdc::prepName($first);
+    $last = Gdc::prepName($last);
+    $full = Gdc::prepName($full);
+    if (($oFull != '' && $full == '')
+        || ($oFirst != '' && $first == '')
+        || ($oLast != '' && $last == '')
+    ) {
+        $jsObj->ErrorMsg = 'Invalid name after cleanup/preparation for screening';
+        $jsObj->ErrorTitle = 'Name Error';
+    } else {
+        $jsObj->Result = 1;
+        $jsObj->First = $first;
+        $jsObj->Last = $last;
+        $jsObj->Full = $full;
+        $jsObj->eType = $eType;
+    }
+
+    break;
+
+case 'gdc-run-monitor':
+    $tpQueue->add3P($currentThirdPartyID);
+    $sql = "SELECT gdcScreeningID FROM thirdPartyProfile "
+        ."WHERE id = '$tpID' AND clientID = '$clientID' LIMIT 1";
+    $jsObj->Reload = $dbCls->fetchValue($sql);
+    break;
+
+case 'gdc-run':
+    $rawCfg = json_decode(base64_decode((string) $_POST['cfg']));
+    $cfg = [];
+    if (is_array($rawCfg)) {
+        // ensure at least 1 name is included
+        foreach ($rawCfg as $nm) {
+            if ($nm->incl == 1) {
+                $n = [$ci_input->cleanString($nm->eType), $ci_input->cleanString($nm->basis), $ci_input->cleanString($nm->src)];
+                if ($nm->basis == 'fila') {
+                    $n[] = $ci_input->cleanString($nm->first);
+                    $n[] = $ci_input->cleanString($nm->last);
+                } else {
+                    $n[] = $ci_input->cleanString($nm->name);
+                }
+                $cfg[] = join('|', $n);
+            }
+        }
+        if (!$cfg) {
+            $jsObj->ErrorMsg = 'At least one name must be included.';
+            $jsObj->ErrorTitle = 'Screening Aborted';
+            break;
+        }
+    } elseif ($rawCfg === null) {
+        $jsObj->ErrorMsg = 'Configuration could not be parsed.';
+        $jsObj->ErrorTitle = 'Screening Aborted';
+        break;
+    }
+
+    try {
+        // Run a GDC now
+        $tpQueue->add3P($currentThirdPartyID);
+        include_once __DIR__ . '/../includes/php/class_gdccase.php';
+        $jsResult = 1;
+        $gdc = new GdcCase($caseID, $clientID, $cfg);
+        $screeningID = $gdc->screenCase();
+        $jsObj->ScreeningID = $screeningID;
+        // run media monitor background "one off" search
+        if ($mmEnabled && !empty($caseID) && !empty($cfg)
+            && ($details = getTenantDetailsFromCase($caseID)) && !empty($details['tpID'])
+        ) {
+            $searchArgs = base64_encode(serialize($cfg)) . " {$e_userID} {$e_spID} {$clientID} " . $details['tpID'] . " {$caseID}";
+            if (($didAllSearchesFinish = $mmModel->search($searchArgs, '../../../')) && $didAllSearchesFinish === false) {
+                $jsResult = 0;
+                $jsObj->ErrorMsg = 'The Media Monitor was unable to retrieve some results. Please retry your search.';
+                $jsObj->ErrorTitle = 'Media Monitor Error';
+            }
+        }
+    } catch (GdcException $ex) {
+        $jsResult = 0;
+        $jsObj->ErrorMsg = $ex->getMessage();
+        $jsObj->ErrorTitle = 'Screening Error';
+    }
+    $jsObj->Result = $jsResult;
+    break;
+
+case 'mm-review-log':
+case 'review-log':
+    $gdc = new Gdc($clientID);
+    $html = '';
+    $e_source_ID = $source_ID = ($op == 'review-log') ? $_SESSION[$sessKey]['Hit']['ID'] : intval($_POST['source_recid']);
+    $source = ($op == 'review-log') ? 'source_ID' : 'source_recid';
+    $whereClause = ($op == 'review-log') ? "AND l.caseID = '$e_caseID'" : "";
+    $andClause = ($op == 'review-log') ?  "AND l.spID = '$e_spID'" : "";
+    $revtbl = ($op == 'review-log') ? 'spGdcReviewLog' : 'mediaMonReviewLog';
+    $sql = "SELECT l.whenReviewed, IF (u.userName IS NOT NULL, u.userName, \n"
+        . "CONCAT('(', l.userID, ')')) AS `Reviewer`, \n"
+        . "l.source_recid AS Reference, l.determination, \n"
+        . "prevDetermination, reason \n"
+        . "FROM $spdb.{$revtbl} AS l \n"
+        . "LEFT JOIN $globaldb.users AS u ON u.id = l.userID \n"
+        . "WHERE l.{$source} = '$e_source_ID' {$whereClause} \n"
+        . "AND l.clientID = '$e_clientID' {$andClause} ORDER BY l.id DESC";
+
+    
+    if ($recs = $dbCls->fetchObjectRows($sql)) {
+
+        if($aiSummaryEnabled){
+            // AI Summary code
+        $remedColHdr = ($gdc->enableTrueMatch) ? " <th>Remediated?</th>\n" : "";
+            $remedReasonColHdr = ($gdc->enableTrueMatch) ? " <th>Reason</th>\n" : "";
+            $html = '';
+            $rowcnt = 0;
+            foreach ($recs as $rec) {
+
+                $cls = ($rowcnt++ & 1) ? 'odd' : 'even';
+                $flag = $gdc->flagTrans[$rec->determination];
+                $prev = (!empty($rec->prevDetermination)) ? $gdc->flagTrans[$rec->prevDetermination] : "";
+                $reason = $rec->reason;
+                $category = ($hasCatFtr && ($op != 'review-log')) ? '<td>' . $rec->catName . '</td>' : '';
+
+                $remedCol = $remedReasonCol = "";
+                if ($gdc->enableTrueMatch) {
+                    $remedCol = '<td>' . (($rec->remediation > 0) ? 'Yes' : 'No') . "</td>";
+                    $remedReasonCol = '<td>' . $rec->remedReason . "</td>";
+                }
+                $auditlogTStamp = strtotime($rec->whenReviewed);
+                $html .= '<button class="accordion basis-summary-header" onclick="gdcdata.auditLoghandle(' . $auditlogTStamp . ')"><img class="single-audit-log-img single-audit-' . $auditlogTStamp . ' active" src="' . $sitepath . '/aws/images/expand.png"><span class="basis-summary-title">' . $rec->whenReviewed . '</span></button> <div class="panel"><table border="1" class="gray-sp audit-log-collapsecnt" cellpadding="3" cellspacing="2">' . "\n"
+                    . "<tr>\n";
+
+                $html .=  " <th>Review time</th>\n"
+                    . '<td>' . $rec->whenReviewed . '</td>'
+                    . '</tr><tr>'
+                    . "  <th>Reviewer</th>\n"
+                    . '<td>' . $rec->Reviewer . '</td>'
+                    . '</tr><tr>'
+                    . "  <th>Reference</th>\n"
+                    . '<td>' . $rec->Reference . '</td>'
+                    . '</tr><tr>'
+                    . "  <th>Determination</th>\n"
+                    . '<td>' . $flag . '</td>'
+                    . '</tr><tr>'
+                    . "  <th>Previous</th>\n"
+                    . '<td>' . $prev . '</td>'
+                    . '</tr><tr>'
+                    . "  <th>Note</th>\n"
+                    . '<td>' . $reason . '</td>'
+                    . '</tr><tr>'
+                    . $categoryColHdr
+                    . $category
+                    . '</tr><tr>'
+                    . $remedColHdr
+                    . $remedCol
+                    . '</tr><tr>'
+                    . $remedReasonColHdr
+                    . $remedReasonCol
+                    . '</tr>';
+                $html .= "</table>\n</div><hr />";
+            }
+            $html = rtrim($html, '<hr />');
+        }else{
+            // old code
+            $html = '<table class="gray-sp" cellpadding="3" cellspacing="2">' . "\n"
+            . "<tr>\n"
+            . "  <th>When Reviewed</th>\n"
+            . "  <th>Reviewed By</th>\n"
+            . "  <th>Reference</th>\n"
+            . "  <th>Determination</th>\n"
+            . "  <th>Previous</th>\n"
+            . "  <th>Note</th>\n"
+            . "</tr>\n";
+        $rowcnt = 0;
+        foreach ($recs as $rec) {
+            $cls = ($rowcnt++ & 1) ? 'odd': 'even';
+            $flag = $gdc->flagTrans[$rec->determination];
+            $prev = (!empty($rec->prevDetermination)) ? $gdc->flagTrans[$rec->prevDetermination] : "";
+            $reason = $rec->reason;
+            $html .= <<< EOT
+<tr class="$cls">
+  <td>$rec->whenReviewed</td>
+  <td>$rec->Reviewer</td>
+  <td class="ta-cent">$rec->Reference</td>
+  <td>$flag</td>
+  <td>$prev</td>
+  <td>$reason</td>
+</tr>
+EOT;
+        }
+        $html .= "</table>\n";
+        }
+    } else {
+        $html = '<p>You are the first to review this information as it pertains to the '
+            . 'current case.</p>';
+    }
+    $jsObj->HTML = $html;
+    break;
+
+case 'mm-save-eval':
+    if (!$mmEnabled) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Media Monitor not enabled';
+        break;
+    }
+    $jsObj->ResultID = 0; // non-zero signals must reload hit list
+    $newFlag = $dbCls->escape_string($_POST['flag']);
+    $id = intval($_POST['source_recid']);
+    $newReason = (isset($_POST['reason'])) ? $dbCls->escape_string(substr((string) $_POST['reason'], 0, 2000)) : "";
+    $newReasonID = (isset($_POST['reasonID'])) ? intval($_POST['reasonID']) : "";
+    $gdc = new Gdc($clientID);
+
+    $q = "SELECT * FROM {$spdb}.mediaMonReviewLog WHERE source_recid = {$id} AND clientID = {$clientID} "
+        . "ORDER BY id DESC LIMIT 1";
+    $hit = $dbCls->fetchAssocRow($q);
+
+    if ($hit['determination'] != $newFlag
+        || $hit['reason'] != $newReason
+        || $hit['reasonID'] != $newReasonID
+    ) {
+        $sql = "SELECT r.id, r.searchID AS screeningID, s.tpID, l.determination FROM {$spdb}.mediaMonResults AS r "
+            . "INNER JOIN {$spdb}.mediaMonSrch AS s ON (r.searchID = s.id) "
+            . "LEFT JOIN {$spdb}.mediaMonReviewLog AS l ON (r.id = l.source_recid) "
+            . "WHERE r.id = '$id' "
+            . "AND r.deleted = 0 "
+            . "AND r.tenantID = {$clientID} "
+            . "AND r.spID = {$e_spID} "
+            . "LIMIT 1";
+        if ($resultRec = $dbCls->fetchObjectRow($sql)) {
+            $sql = "INSERT INTO {$spdb}.mediaMonReviewLog SET "
+                . "clientID = :clientID, "
+                . "userID = :userID, "
+                . "tpID = :tpID, "
+                . "source_recid = :source_recid, "
+                . "screeningID = :screeningID, "
+                . "determination = :determination, "
+                . "prevDetermination = :prevDetermination, "
+                . "reason = :newReason, "
+                . "reasonID = :newReasonID, " // 0 is equivalent to the "Choose..." or "Other" options
+                . "spID = :spID";
+            $params = [
+                ':clientID' => $clientID,
+                ':userID' => $userID,
+                ':tpID' => $resultRec->tpID,
+                ':source_recid' => $resultRec->id,
+                ':screeningID' => $resultRec->screeningID,
+                ':determination' => $newFlag,
+                ':prevDetermination' => $resultRec->determination,
+                ':newReason' => normalizeLF($newReason),
+                ':newReasonID' => $newReasonID,
+                ':spID' => (int)$e_spID
+            ];
+            if ($PDO->query($sql, $params)) {
+                if ($aiSummaryEnabled) {
+                    $jsObj->ResultID = $_SESSION['mediamonitor']['resultID'];
+                    $jsObj->ScreeningID = $_SESSION['mediamonitor']['screeningID'];
+                } else {
+                    $jsObj->ResultID = $PDO->lastInsertId();
+                    $jsObj->ScreeningID = $hitReviewRow->screeningID;
+                }
+                $jsObj->Result = 0;
+            }
+
+        }
+        $tpQueue->add3P($currentThirdPartyID);
+    }
+    break;
+
+case 'save-eval':
+    $jsObj->ResultID = 0; // non-zero signals must reload hit list
+    $newFlag = $dbCls->escape_string($_POST['flag']);
+    $newReason = (isset($_POST['reason'])) ? $dbCls->escape_string(substr((string) $_POST['reason'], 0, 2000)) : "";
+    $newReasonID = (isset($_POST['reasonID'])) ? intval($_POST['reasonID']) : "";
+    $gdc = new Gdc($clientID);
+
+    if (!isset($_SESSION[$sessKey])
+        || !isset($_SESSION[$sessKey]['isCurrent'])
+        || !$_SESSION[$sessKey]['isCurrent']
+        || !isset($_SESSION[$sessKey]['screeningID'])
+        || !isset($_SESSION[$sessKey]['resultID'])
+        || !isset($_SESSION[$sessKey]['Hits'])
+        || !isset($_SESSION[$sessKey]['HitTbl'])
+        || !isset($_SESSION[$sessKey]['Hit'])
+        || !array_key_exists($newFlag, $gdc->flagImage)
+    ) {
+        if (0) {
+            devDebug('uh-oh');
+            devDebug($newFlag, 'newFlag');
+            devDebug($_SESSION[$sessKey], $sessKey);
+        }
+        break;
+    }
+    $hit = $_SESSION[$sessKey]['Hit'];
+    $tbl = $_SESSION[$sessKey]['HitTbl'];
+    extract($hit); // $ref, $prevRef, $ID, $name, $type, $status, $flag
+    if (($status == 'new' && $flag != 'undetermined')
+        || $newFlag != $flag
+        || ($status == 'changed' && $flag != 'falsePositive')
+        || $hit['reason'] != $newReason
+        || $hit['reasonID'] != $newReasonID
+    ) {
+        $tpQueue->add3P($currentThirdPartyID);
+
+        // get result record
+        $e_screeningID = $screeningID = $_SESSION[$sessKey]['screeningID'];
+        $e_resultID = $resultID = $_SESSION[$sessKey]['resultID'];
+        [$source_recid, $source_ID] = explode(':', (string) $ref);
+        $e_source_recid = $source_recid;
+        $e_source_ID = $source_ID;
+        $e_tbl = $tbl;
+        $e_newFlag = $newFlag;
+        $e_flag = $flag;
+        $sql = "SELECT nameID FROM $spdb.spGdcResult WHERE id = '$e_resultID' "
+            . "AND screeningID = '$e_screeningID' AND caseID = '$e_caseID' "
+            . "AND clientID = '$e_clientID' AND spID = '$e_spID' LIMIT 1";
+        if ($resultRec = $dbCls->fetchObjectRow($sql)) {
+            $e_userID = $userID = $_SESSION['id'];
+            $e_nameID = $resultRec->nameID; // originated from DB
+            $sql = "INSERT INTO $spdb.spGdcReviewLog SET "
+            . "clientID = :clientID, "
+            . "screeningID = :screeningID, "
+            . "caseID = :caseID, "
+            . "spID = :spID, "
+            . "resultID = :resultID, "
+            . "nameID = :nameID, "
+            . "userID = :userID, "
+            . "source_table = :source_table, "
+            . "source_recid = :source_recid, "
+            . "source_ID = :source_ID, "
+            . "determination = :determination, "
+            . "prevDetermination = :prevDetermination, "
+            . "reason = :newReason, "
+            . "reasonID = :newReasonID";
+            $params = [
+                ':clientID' => $e_clientID,
+                ':screeningID' => $e_screeningID,
+                ':caseID' => $e_caseID,
+                ':spID' => $e_spID,
+                ':resultID' => $e_resultID,
+                ':nameID' => $e_nameID,
+                ':userID' => $e_userID,
+                ':source_table' => $e_tbl,
+                ':source_recid' => $e_source_recid,
+                ':source_ID' => $e_source_ID,
+                ':determination' => $e_newFlag,
+                ':prevDetermination' => $e_flag,
+                ':newReason' => normalizeLF($newReason),
+                ':newReasonID' => $newReasonID
+            ];
+            if ($PDO->query($sql, $params)) {
+                $jsObj->ResultID = $resultID;
+                $jsObj->ScreeningID = $screeningID;
+            }
+
+        }
+    }
+    break;
+
+case 'bulk-reasons':
+    $mode = (isset($_POST['adjMode'])) ? $dbCls->escape_string($_POST['adjMode']) : 'gdc';
+    $feature = ($mode == 'mm') ? 128 : 98; // g_features.id for media monitor and basic gdc respectively
+    $reasons = getAdjudicationReasons($clientID, 'Both', $feature);
+    if (!empty($reasons)) {
+        $jsObj->AdjudicationReasons = $reasons;
+        $jsObj->Result = 1;
+    } else {
+        $jsObj->Result = 0;
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid adjudication mode';
+        break;
+    }
+    break;
+
+case 'mm-bulk-update':
+    if (!$mmEnabled) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Media Monitor not enabled';
+        break;
+    }
+    $determinations = ['match', 'undetermined', 'falsePositive'];
+    $determination_id = (int)$_POST['bulkmatch']; // 0=match; 1=undetermined; 2=falsePositive
+    if (($determination_id < 0) || ($determination_id > 2)) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid determination';
+        break;
+    }
+    $bulkids = explode(',', (string) $_POST['bulkids']);
+    $bulkvals = explode(',', (string) $_POST['bulkvals']);
+    $bulkreason = (isset($_POST['bulkreason'])) ? $dbCls->escape_string(substr((string) $_POST['bulkreason'], 0, 2000)) : "";
+    $bulkreasonID = (isset($_POST['bulkreasonID'])) ? intval($_POST['bulkreasonID']) : "";
+    $totalids = count($bulkids);
+    $screeningID = $_SESSION['mediamonitor']['screeningID'];
+    $resultID = $_SESSION['mediamonitor']['resultID'];
+    $newFlag = $determinations[$determination_id];
+    $gdc = new Gdc($clientID);
+
+    for ($a=0; $a<$totalids; $a++) {
+        if ($bulkvals[$a] == '1') {
+            $source_recid = intval($bulkids[$a]);
+
+            $q = "SELECT determination FROM {$spdb}.mediaMonReviewLog WHERE source_recid = {$source_recid} "
+                . "AND clientID = {$clientID} ORDER BY id DESC LIMIT 1";
+            $prevFlag = $dbCls->fetchValue($q);
+
+            $sql = "SELECT r.id, r.searchID AS screeningID, s.tpID, l.determination FROM {$spdb}.mediaMonResults AS r "
+                . "INNER JOIN {$spdb}.mediaMonSrch s ON (r.searchID = s.id) "
+                . "LEFT JOIN {$spdb}.mediaMonReviewLog l ON (r.id = l.source_recid) "
+                . "WHERE r.id = '$source_recid' "
+                . "AND r.deleted = 0 "
+                . "AND r.tenantID = '$clientID' LIMIT 1";
+
+            if ($resultRec = $dbCls->fetchObjectRow($sql)) {
+                $sql = "INSERT INTO {$spdb}.mediaMonReviewLog SET "
+                    . "clientID = :clientID, "
+                    . "userID = :userID, "
+                    . "tpID = :tpID, "
+                    . "source_recid = :source_recid, "
+                    . "screeningID = :screeningID, "
+                    . "determination = :determination, "
+                    . "prevDetermination = :prevDetermination, "
+                    . "bulk = :bulk, "
+                    . "reason = :newReason, "
+                    . "reasonID = :newReasonID, " // 0 is equivalent to the "Choose..." or "Other" options
+                    . "spID = :spID";
+                $params = [
+                    ':clientID' => $clientID,
+                    ':userID' => $userID,
+                    ':tpID' => $resultRec->tpID,
+                    ':source_recid' => $resultRec->id,
+                    ':screeningID' => $resultRec->screeningID,
+                    ':determination' => $newFlag,
+                    ':prevDetermination' => $prevFlag,
+                    ':bulk' => 1,
+                    ':newReason' => normalizeLF($bulkreason),
+                    ':newReasonID' => $bulkreasonID,
+                    ':spID' => $e_spID
+                ];
+                if ($PDO->query($sql, $params)) {
+                    $jsObj->ResultID = $resultID;
+                    $jsObj->ScreeningID = $screeningID;
+                }
+
+            }
+        }
+    }
+    $tpQueue->add3P($currentThirdPartyID);
+    $jsObj->Result = 1;
+    break;
+
+case 'bulk-update':
+    $determinations = ['match', 'undetermined', 'falsePositive'];
+    $determination_id = (int)$_POST['bulkmatch']; // 0=match; 1=undetermined; 2=falsePositive
+    if (($determination_id < 0) || ($determination_id > 2)) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid determination';
+        break;
+    }
+    $bulkids = explode(',', (string) $_POST['bulkids']);
+    $bulkvals = explode(',', (string) $_POST['bulkvals']);
+    $bulkreason = (isset($_POST['bulkreason'])) ? $dbCls->escape_string(substr((string) $_POST['bulkreason'], 0, 2000)) : "";
+    $bulkreasonID = (isset($_POST['bulkreasonID'])) ? intval($_POST['bulkreasonID']) : "";
+    $totalids = count($bulkids);
+    $userID = $_SESSION['id'];
+    $e_screeningID = $screeningID = $_SESSION[$sessKey]['screeningID'];
+    $e_resultID = $resultID = $_SESSION[$sessKey]['resultID'];
+    $e_newFlag = $newFlag = $determinations[$determination_id];
+
+    $gdc = new Gdc($clientID);
+
+    for ($a=0; $a<$totalids; $a++) {
+        if ($bulkvals[$a] == '1') {
+            // This source ID was selected for bulk update
+            [$ref_ID, $source_ID, $tbl] = explode(':', $bulkids[$a]);
+
+            $e_source_recid = $source_recid = $ref_ID = preg_replace("/[^0-9]/", "", $ref_ID);
+            $e_source_ID = $source_ID = preg_replace("/[^0-9]/", "", $source_ID);
+            $e_tbl = $tbl;
+            if (!in_array($tbl, $gdc->tables)) {
+                $jsObj->ErrorTitle = 'Operation Failed';
+                $jsObj->ErrorMsg = 'Invalid source';
+                break;
+            }
+
+            $prevFlag = $dbCls->fetchValue("SELECT determination FROM $spdb.spGdcReviewLog WHERE "
+                . "source_ID = '$source_ID' AND screeningID = '$screeningID' "
+                . "AND clientID='$e_clientID' ORDER BY id DESC"
+            );
+
+            $sql = "SELECT nameFrom, nameID FROM $spdb.spGdcResult WHERE id = '$resultID' "
+                . "AND screeningID = '$screeningID' AND clientID = '$e_clientID' LIMIT 1";
+            if ($resultRec = $dbCls->fetchObjectRow($sql)) {
+                $sql = "INSERT INTO $spdb.spGdcReviewLog SET "
+                    . "clientID = :clientID, "
+                    . "screeningID = :screeningID, "
+                    . "caseID = :caseID, "
+                    . "spID = :spID, "
+                    . "resultID = :resultID, " //
+                    . "nameID = :nameID, "
+                    . "nameFrom = :nameFrom, "
+                    . "userID = :userID, "
+                    . "source_table = :source_table, "
+                    . "source_recid = :source_recid, "
+                    . "source_ID = :source_ID, "
+                    . "determination = :determination, "
+                    . "prevDetermination = :prevDetermination, "
+                    . "bulk = :bulk, " // This flag means record was updated as part of bulk action
+                    . "reason = :bulkreason, "
+                    . "reasonID = :bulkreasonID"; // 0 is equivalent to the "Choose..." or "Other" options
+                $params = [
+                    ':clientID' => $e_clientID,
+                    ':screeningID' => $e_screeningID,
+                    ':caseID' => $e_caseID,
+                    ':spID' => $e_spID,
+                    ':resultID' => $e_spID,
+                    ':nameID' => $resultRec->nameID,
+                    ':nameFrom' => $resultRec->nameFrom,
+                    ':userID' => $userID,
+                    ':source_table' => $tbl,
+                    ':source_recid' => $ref_ID,
+                    ':source_ID' => $source_ID,
+                    ':determination' => $newFlag,
+                    ':prevDetermination' => $prevFlag,
+                    ':bulk' => 1,
+                    ':bulkreason' => normalizeLF($bulkreason),
+                    ':bulkreasonID' => $bulkreasonID // 0 is equivalent to the "Choose..." or "Other" options
+                ];
+                if ($PDO->query($sql, $params)) {
+                    $jsObj->ResultID = $resultID;
+                    $jsObj->ScreeningID = $screeningID;
+                }
+
+            }
+        }
+    }
+    $tpQueue->add3P($currentThirdPartyID);
+    $jsObj->Result = 1;
+    break;
+
+case 'load-detail':
+    $tbl = $_POST['tbl'];
+    $ref = $_POST['ref'];
+    $currentReason = (isset($_POST['reason'])) ? $dbCls->escape_string($_POST['reason']) : '';
+    $currentReasonID = (isset($_POST['reasonID'])) ? intval($_POST['reasonID']) : '';
+    $gdc = new Gdc($clientID);
+    $refPat = '/^\d+:\d+$/';
+    if (!in_array($tbl, $gdc->tables)
+        || !preg_match($refPat, (string) $ref)
+    ) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid request (1)';
+        break;
+    }
+    // validate request
+    $validRef = false;
+    $hit = false;
+    foreach ($_SESSION[$sessKey]['Hits'][$tbl] as $hit) {
+        if ($hit['ref'] == $ref) {
+            $validRef = true;
+            $_SESSION[$sessKey]['HitTbl'] = $tbl;
+            $_SESSION[$sessKey]['Hit'] = $hit;
+            break;
+        }
+    }
+    if (!$validRef) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid request (2)';
+        break;
+    }
+    [$source_recid, $source_ID] = explode(':', (string) $ref);
+    $jsObj->IsCurrent = $_SESSION[$sessKey]['isCurrent'];
+    $jsObj->Record = $gdc->recordByRecId($tbl, $source_recid, true, true);
+    $jsObj->Flag = $hit['flag'];
+    $changed = ($hit['status'] == 'changed');
+    if (!$changed || $hit['flag'] == 'falsePositive') {
+        $jsObj->Mode = 'single';
+    } else {
+        $jsObj->Mode = 'dual';
+        [$source_recid, $source_ID] = explode(':', (string) $hit['prevRef']);
+        $jsObj->PrevRecord = $gdc->recordbyrecid($tbl, $source_recid, true, true);
+        $gdc->equalizeRecords($tbl, $jsObj->Record, $jsObj->PrevRecord);
+    }
+
+    $isEntity = ($_POST['type'] == 'Entity') ? 1 : 0;
+    $jsObj->AdjudicationReasons = getAdjudicationReasons($clientID, $_POST['type'], 98);
+    $currentReasonObj = (object) [
+        'reasonText' => htmlspecialchars_decode((string) $currentReason, ENT_QUOTES),
+        'reasonID' => $currentReasonID
+    ];
+    if ($aiSummaryEnabled) {
+        $adjudicationStatusKey = "Adjudication status";
+        if ($jsObj->Flag == "match") {
+            $jsObj->Record[$adjudicationStatusKey] = '<div class="true-false-td"><image class="true-false-img" src="' . $sitepath . '/aws/images/truepossitive.png"><span class="media-monitor-span media-monitor-span-width" style="color: #1E1E1E;">True Match</span></div>';
+        } elseif ($jsObj->Flag == "falsePositive") {
+            $jsObj->Record[$adjudicationStatusKey] = '<div class="true-false-td"><image class="true-false-img" src="' . $sitepath . '/aws/images/falsepositive.png"><span class="media-monitor-span media-monitor-span-width" style="color: #1E1E1E;">False positive</span></div>';
+        }
+        if ($jsObj->Flag == "match" || $jsObj->Flag == "falsePositive") {
+            $adjudicationkey = array_search($currentReasonObj->reasonID, array_column($jsObj->AdjudicationReasons[$jsObj->Flag], "id"));
+            if($adjudicationkey !== false){
+                $jsObj->Record['Adjudication reason'] = $jsObj->AdjudicationReasons[$jsObj->Flag][$adjudicationkey]->listText;
+                $jsObj->Record['Adjudication reason description'] = $currentReasonObj->reasonText;
+            }
+        }
+    }
+
+    $jsObj->AdjudicationReasons['current'] = $currentReasonObj;
+    $jsObj->Result = 1;
+    break;
+
+case 'mm-load-result':
+    if (!$mmEnabled) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Media Monitor not enabled';
+        break;
+    }
+    $gdc = new Gdc($clientID);
+    $resultID = (isset($_POST['r'])) ? (int) $_POST['r'] : null;
+    $q = "SELECT s.tpID, s.idType FROM {$spdb}.mediaMonReviewLog AS l "
+        . "LEFT JOIN {$spdb}.mediaMonSrch AS s ON "
+        . "    (l.screeningID = s.id) "
+        . "WHERE l.id = {$resultID} ";
+    $resultRec = $dbCls->fetchObjectRow($q);
+    if (isset($resultRec)) {
+        $polymorphicID = (int)$resultRec->tpID;
+        $nameFrom = $mmModel->getMediaMonitorNamingCol($resultRec->idType);
+        // proper formatting for record type
+        $idType = ($resultRec->idType == 'person') ? 'person' : 'profile';
+    } else {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid result record reference';
+        break;
+    }
+
+    $name = $mmModel->getTpOrTppName($polymorphicID, $idType, $nameFrom);
+
+    $jsObj->mmSubject = [
+        'polymorphicID' => $polymorphicID,
+        'idType' => $idType,
+        'name' => $name
+    ];
+
+    $mmResults = $mmModel->getCachedResults(
+        $polymorphicID,
+        $idType,
+        $currentThirdPartyID,
+        true,
+        $nameFrom //narrows based on thirdPartyProfile.name
+    );
+
+    // determines results already adjudicated
+    if (is_array($mmResults) && count($mmResults) > 0) {
+        foreach ($mmResults as $index => $result) {
+            if ($mmModel->mmRsltWasAdjudicated($result['source_recid'])) {
+                unset($mmResults[$index]);
+            }
+        }
+    }
+
+    $mmReviews = $mmModel->getMediaMonitorAdjudicated(
+        $polymorphicID,
+        $currentThirdPartyID,
+        $idType,
+        null,
+        $gdc->enableTrueMatch
+    );
+
+    $jsObj->mmResults = $mmResults;
+    $jsObj->mmReviews = $mmReviews;
+
+    $screeningID = $_SESSION['mediamonitor']['screeningID'];
+    $resultID = $_SESSION['mediamonitor']['resultID'];
+    $tpID = $currentThirdPartyID;
+    $sqlS = "SELECT * FROM {$spdb}.spGdcScreening WHERE id = '$screeningID' "
+        . "AND caseID = '$caseID' AND clientID = '$clientID' "
+        . "AND spID = '$e_spID' LIMIT 1";
+    $sqlR = "SELECT * FROM {$spdb}.spGdcResult WHERE id = '$resultID' AND screeningID = '$screeningID' "
+        . "AND caseID = '$e_caseID' AND clientID = '$clientID' AND spID = '$e_spID' LIMIT 1";
+    if (!isset($_SESSION[$sessKey])
+        || $_SESSION[$sessKey]['screeningID'] != $screeningID
+        || !($screeningRec = $dbCls->fetchObjectRow($sqlS))
+        || !($resultRec = $dbCls->fetchObjectRow($sqlR))
+    ) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid result record reference';
+        break;
+    }
+    $_SESSION[$sessKey]['resultID'] = $resultID;
+    $details = unserialize($resultRec->details);
+    $tables = $gdc->tables;
+    $results = [];
+    $tallies = [];
+    foreach ($tables as $tbl) {
+        $results[$tbl] = [];
+    }
+    $jsObj->FlagTrans = $gdc->flagTrans;
+    $jsObj->StatusTrans = $gdc->statusTrans;
+    $jsObj->TableTrans = $gdc->tableTrans;
+    $jsObj->StatSym = $gdc->statusImage;
+    $jsObj->FlagSym = $gdc->flagImage;
+    foreach ($gdc->tables as $tbl) {
+        if (!isset($details['ref'][$tbl])) {
+            continue;
+        }
+        $refs = [];
+        // counts for display action
+        $tallies[$tbl] = [
+            'rvw' => 0,
+            // review
+            'uc' => 0,
+            // unchanged
+            'tm' => 0,
+            // true match
+            'fp' => 0,
+        ];
+        $rows = $gdc->previewList($tbl, $details['ref'][$tbl]);
+
+        foreach ($rows as $row) {
+
+            if ($tbl != 'icij') {
+                if (!empty($row->First_Name) || !empty($row->Last_Name)) {
+                    $name = trim($row->First_Name . ' ' . $row->Last_Name);
+                } else {
+                    $name = $row->Full_Name;
+                }
+                if (!$name && $row->AltScript) {
+                    $name = $row->AltScript;
+                }
+                if (!$name) {
+                    $name = '(name missing)'; // should not happen!
+                }
+            } else {
+                $name = $row->Full_Name;
+                $row->RecType = null;
+            }
+            $ref = $row->recid . ':' . $row->ID;
+
+            // get most recent review record
+            $prevRef = '';
+            $reason = '';
+            $reasonID = '';
+            $sql = "SELECT * FROM {$spdb}.spGdcReviewLog WHERE source_ID = '$row->ID' "
+                . "AND screeningID <= '$screeningID' "
+                . "AND nameID = '$resultRec->nameID' "
+                . "AND caseID = '$e_caseID' AND clientID = '$clientID' "
+                . "ORDER BY id DESC LIMIT 1";
+            if ($reviewRec = $dbCls->fetchObjectRow($sql)) {
+                $flag = $reviewRec->determination;
+                $reason = $reviewRec->reason ?? null;
+                $reasonID = $reviewRec->reasonID ?? null;
+                if ($row->recid == $reviewRec->source_recid) {
+                    $status = 'unchanged';
+                } else {
+                    $status = 'changed';
+                    $prevRef = $reviewRec->source_recid . ':' . $reviewRec->source_ID;
+                }
+                $status = ($row->recid == $reviewRec->source_recid) ? 'unchanged': 'changed';
+            } else {
+                $status = 'new';
+                $flag = 'undetermined';
+            }
+            $ref = ['ref' => $ref, 'prevRef' => $prevRef, 'ID' => $row->ID, 'name' => $name, 'type' => $row->RecType, 'status' => $status, 'flag' => $flag, 'reason' => $reason, 'reasonID' => $reasonID];
+            $results[$tbl][] = $ref;
+            if ($flag == 'falsePositive') {
+                $tallies[$tbl]['fp']++;
+            } elseif ($status == 'unchanged' && $flag != 'undetermined') {
+                $tallies[$tbl]['uc']++;
+            } else {
+                $tallies[$tbl]['rvw']++;
+                if ($flag == 'match') {
+                    $tallies[$tbl]['tm']++;
+                }
+            }
+        }
+    }
+
+    $jsObj->Result = 1;
+    $_SESSION[$sessKey]['Hits'] = $results;
+    $jsObj->Hits = $results;
+    $jsObj->Tallies = $tallies;
+    $jsObj->ShowFP = $_SESSION[$sessKey]['showFP'];
+    $jsObj->ShowUC = $_SESSION[$sessKey]['showUC'];
+
+    // Tallies for media monitor - this displays in the Review Needed? Section
+    $mmTM = 0;
+    $mmFP = 0;
+
+    if (is_array($mmReviews) && count($mmReviews) > 0) {
+        foreach ($mmReviews as $rev) {
+            if ($rev['determination'] == 'falsePositive') {
+                $mmFP++;
+            } else if ($rev['determination'] == 'match') {
+                $mmTM++;
+            }
+        }
+    }
+
+    $tallies['mm'] = [
+        'rvw' => count($jsObj->mmResults),
+        'uc' => count($jsObj->mmReviews),
+        'tm' => $mmTM,
+        'fp' => $mmFP
+    ];
+
+    $jsObj->Tallies = $tallies;
+
+    break;
+
+case 'alter-show':
+    $_SESSION[$sessKey]['showFP'] = (intval($_POST['fp']) == 1) ? 1 : 0;
+    $_SESSION[$sessKey]['showUC'] = (intval($_POST['uc']) == 1) ? 1 : 0;
+    $screeningID = $_SESSION[$sessKey]['screeningID'];
+    $resultID = $_SESSION[$sessKey]['resultID'];
+    // pass through
+case 'load-result':
+
+    if ($op == 'load-result') {
+        $screeningID = intval($_POST['s']);
+        $resultID = intval($_POST['r']);
+        $_SESSION['mediamonitor']['screeningID'] = $screeningID;
+        $_SESSION['mediamonitor']['resultID'] = $resultID;
+    }
+    $e_screeningID = intval($screeningID);
+    $e_resultID    = intval($resultID);
+
+    $sqlS = "SELECT * FROM $spdb.spGdcScreening WHERE id = '$e_screeningID' "
+        . "AND caseID = '$e_caseID' AND clientID = '$e_clientID' "
+        . "AND spID = '$e_spID' LIMIT 1";
+    $sqlR = "SELECT * FROM $spdb.spGdcResult WHERE id = '$e_resultID' "
+        . "AND screeningID = '$e_screeningID' AND caseID = '$e_caseID' "
+        . "AND clientID = '$e_clientID' AND spID = '$e_spID' LIMIT 1";
+    if (!isset($_SESSION[$sessKey])
+        || $_SESSION[$sessKey]['screeningID'] != $screeningID
+        || !($screeningRec = $dbCls->fetchObjectRow($sqlS))
+        || !($resultRec = $dbCls->fetchObjectRow($sqlR))
+    ) {
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid result record reference';
+        break;
+    }
+    $_SESSION[$sessKey]['resultID'] = $resultID;
+    $details = unserialize($resultRec->details);
+    $gdc     = new Gdc($clientID);
+    $tables  = $gdc->tables;
+    $results = [];
+    $tallies = [];
+    foreach ($tables as $tbl) {
+        $results[$tbl] = [];
+    }
+    $jsObj->FlagTrans = $gdc->flagTrans;
+    $jsObj->StatusTrans = $gdc->statusTrans;
+    $jsObj->TableTrans = $gdc->tableTrans;
+    $jsObj->StatSym = $gdc->statusImage;
+    $jsObj->FlagSym = $gdc->flagImage;
+    if($aiSummaryEnabled){
+        $tableTrans = $gdc->tableTrans;
+    }
+    foreach ($gdc->tables as $tbl) {
+        if($aiSummaryEnabled){
+            $dataSoruce = $tableTrans[$tbl] ?? '';
+        }
+
+        if (!isset($details['ref'][$tbl])) {
+            continue;
+        }
+        $refs = [];
+        // tally counts for display action
+        $tallies[$tbl] = [
+            'rvw' => 0,
+            // review -- always show
+            'fp'  => 0,
+            // false positive -- hide/show
+            'tm'  => 0,
+            // true match
+            'uc'  => 0,
+        ];
+        $rows = $gdc->previewList($tbl, $details['ref'][$tbl]);
+
+        foreach ($rows as $row) {
+            $ref = $row->recid . ':' . $row->ID;
+            if (!empty($row->First_Name) || !empty($row->Last_Name)) {
+                $name = trim($row->First_Name . ' ' . $row->Last_Name);
+            } else {
+                $name = $row->Full_Name;
+                if (!property_exists($row, 'RecType')) {
+                    $row->RecType = null; // needed property for ICIJ records
+                }
+            }
+            if (!$name && $row->AltScript) {
+                $name = $row->AltScript;
+            }
+            if (!$name) {
+                $name = '(name missing)'; // should not happen!
+            }
+            // get most recent review record
+            $prevRef = '';
+            $reason = '';
+            $reasonID = '';
+            $e_rowID = $dbCls->esc($row->ID); // NOT AN INTEGER (exceeds 32-bit capacity!)
+            $e_screeningID = intval($screeningID);
+            $e_nameID = intval($resultRec->nameID);
+            $sql = "SELECT * FROM {$spdb}.spGdcReviewLog WHERE source_ID = '$e_rowID' "
+                . "AND screeningID <= '$e_screeningID' "
+                . "AND nameID = '$e_nameID' AND spID = '$e_spID' "
+                . "AND caseID = '$e_caseID' AND clientID = '$e_clientID' "
+                . "ORDER BY id DESC LIMIT 1";
+            if ($reviewRec = $dbCls->fetchObjectRow($sql)) {
+                $flag = $reviewRec->determination;
+                $reason = $reviewRec->reason ?? null;
+                $reasonID = $reviewRec->reasonID ?? null;
+                if ($row->recid == $reviewRec->source_recid) {
+                    $status = 'unchanged';
+                } else {
+                    $status = 'changed';
+                    $prevRef = $reviewRec->source_recid . ':' . $reviewRec->source_ID;
+                }
+                $status = ($row->recid == $reviewRec->source_recid) ? 'unchanged': 'changed';
+            } else {
+                $status = 'new';
+                $flag = 'undetermined';
+            }
+
+            if($aiSummaryEnabled){
+                $ref = [
+                    'ref' => $ref,
+                    'prevRef' => $prevRef,
+                    'ID' => $row->ID,
+                    'name' => $name,
+                    'type' => $row->RecType,
+                    'status' => $status,
+                    'flag' => $flag,
+                    'reason' => $reason,
+                    'reasonID' => $reasonID,
+                    'dataSoruce' => $dataSoruce,
+                    'country' => $row->Country,
+                    'category' => $row->Category,
+                    'publicationDate' => $row->PublicationDate
+                ];
+            }else{
+                $ref = [
+                    'ref' => $ref,
+                    'prevRef' => $prevRef,
+                    'ID' => $row->ID,
+                    'name' => $name,
+                    'type' => $row->RecType,
+                    'status' => $status,
+                    'flag' => $flag,
+                    'reason' => $reason,
+                    'reasonID' => $reasonID
+                ];
+            }
+            
+
+
+            $results[$tbl][] = $ref;
+            if ($flag == 'falsePositive') {
+                $tallies[$tbl]['fp']++;
+            } elseif ($status == 'unchanged' && $flag != 'undetermined') {
+                $tallies[$tbl]['uc']++;
+            } else {
+                $tallies[$tbl]['rvw']++;
+                if ($flag == 'match') {
+                    $tallies[$tbl]['tm']++;
+                }
+            }
+        }
+    }
+
+    $jsObj->Result = 1;
+    $_SESSION[$sessKey]['Hits'] = $results;
+    $jsObj->Hits = $results;
+    $jsObj->Tallies = $tallies;
+    $jsObj->ShowFP = $_SESSION[$sessKey]['showFP'];
+    $jsObj->ShowUC = $_SESSION[$sessKey]['showUC'];
+
+    if ($mmEnabled) {
+        // $resultRec->nameFrom == gdcResult.nameFrom (will either be thirdPartyProfile.legalName col or tpPerson tbl)
+        $nameFrom = $mmModel->getMediaMonitorNamingCol($resultRec->nameFrom);
+        if (!$nameFrom || !$resultRec->recType) {
+            $jsObj->ErrorTitle = 'Operation Failed';
+            $jsObj->ErrorMsg = 'Invalid result record reference';
+            break;
+        }
+
+        $idType = ($details['type'] == 'P') ? 'person' : 'profile'; // Accounts for SP discrepancy where P == person and E == entity
+        $_SESSION['mediamonitor']['nameID'] = $polymorphicID = (int)$resultRec->nameID;
+        $name = $mmModel->getTpOrTppName($polymorphicID, $idType, $nameFrom); // All names are retrieved from g_gdcSearchName
+
+        $jsObj->mmSubject = [
+            'polymorphicID' => $polymorphicID,
+            'idType' => $idType,
+            'name' => $name,
+            'nameFrom' => $nameFrom
+        ];
+
+        $mmResults = $mmModel->getCachedResults(
+            $polymorphicID,
+            $idType,
+            $currentThirdPartyID,
+            true,
+            $nameFrom
+        );
+        if (isset($mmResults) && count($mmResults) > 0) {
+            // determines results already adjudicated - will likely need to be modified
+            if (is_array($mmResults) && count($mmResults) > 0) {
+                foreach ($mmResults as $index => $result) {
+                    if ($mmModel->mmRsltWasAdjudicated($result['source_recid'])) {
+                        unset($mmResults[$index]);
+                    }
+                }
+            }
+
+            $jsObj->mmResults = $mmResults;
+
+            // tallies for media monitor - this displays in the Review Needed? Section
+            $mmTM = 0;
+            $mmFP = 0;
+
+            $mmReviews = $mmModel->getMediaMonitorAdjudicated(
+                $polymorphicID,
+                $currentThirdPartyID,
+                $idType,
+                null,
+                $gdc->enableTrueMatch
+            );
+
+            $jsObj->mmReviews = $mmReviews;
+
+            if (isset($mmReviews) && count($mmReviews) > 0) {
+                foreach ($mmReviews as $rev) {
+                    if ($rev['determination'] == 'falsePositive') {
+                        $mmFP++;
+                    } else if ($rev['determination'] == 'match') {
+                        $mmTM++;
+                    }
+                }
+            }
+
+            $tallies['mm'] = [
+                'rvw' => count($jsObj->mmResults),
+                'uc' => count($jsObj->mmReviews),
+                'tm' => $mmTM,
+                'fp' => $mmFP
+            ];
+
+
+            $jsObj->Tallies = $tallies;
+        }
+    }
+
+    break;
+
+case 'update-summary':
+    /*
+     * Determine if review needed, if yes, with reason; update profile, gdc-status page,
+     * and due diligence Review GDC button flag
+     * return results with tallies, as in load-result
+     */
+    // Fetch and tally all screening results
+
+    include_once __DIR__ . '/../includes/php/class_gdccase.php';
+    $gdc = new GdcCase($caseID, $clientID);
+    $status = $gdc->caseStatus($_SESSION[$sessKey]['screeningID']);
+    $attn = (int)$status->attn + (int)$status->icij->attn;
+
+    if ($mmEnabled) {
+        $tpQueue->add3P($currentThirdPartyID);
+        $mmCount = $mmModel->syncHitsByDetermination(
+            $currentThirdPartyID,
+            $_SESSION[$sessKey]['screeningID'],
+            'undetermined',
+            true
+        )['undetermined'];
+
+        if ($mmCount > 0) {
+            $status->needsReviewMM = 1;
+            $attn += (int)$mmCount;
+        } else {
+            $status->needsReviewMM = 0;
+        }
+
+        // Build out array of spGdcResults rows for use with getMediaMonitorStatusObj
+        $sql = "SELECT id, nameID, recType FROM {$spdb}.spGdcResult\n"
+            . "WHERE screeningID = {$_SESSION[$sessKey]['screeningID']} AND clientID = {$clientID} "
+            . "AND caseID = {$caseID} ORDER BY id ASC";
+        $subjects = $dbCls->fetchAssocRows($sql);
+        $status->mm = $mmModel->getMediaMonitorStatusObj(
+            $currentThirdPartyID,
+            $_SESSION[$sessKey]['screeningID'],
+            $subjects
+        );
+    }
+
+    if ($status->message->yesNo == 'Yes' || $status->icij->message->yesNo == 'Yes'
+        || property_exists($status, 'mm') && $status->mm->message->yesNo == 'Yes'
+    ) {
+        $reviewExplain = 'Yes &ndash; ';
+    } else {
+        $reviewExplain = $status->message->yesNo;
+    }
+    if ($attn
+        || ($status->status->error && !empty($status->message->details))
+        || ($status->icij->status->error && !empty($status->icij->message->details))
+    ) {
+        $reviewExplain .= ' ' . (($attn) ? "review {$attn}" : '') . ' &nbsp;';
+        $reviewExplain .= !empty($status->message->details)
+            ? "&nbsp; GDC " . $status->message->details
+            : '';
+        $reviewExplain .= !empty($status->icij->message->details)
+            ? "&nbsp; ICIJ ".$status->icij->message->details
+            : '';
+        if (isset($mmCount) && $mmCount > 0) {
+            $reviewExplain .= "&nbsp; MM (undetermined " . ($mmCount) . ")";
+        }
+    }
+    if (isset($status->mm)) {
+        $recordSums = array_unique(array_merge(
+            array_keys($status->sums),
+            array_keys($status->icij->sums),
+            array_keys($status->mm->sums)
+        ));
+    } else {
+        $recordSums = array_unique(array_merge(
+            array_keys($status->sums),
+            array_keys($status->icij->sums)
+        ));
+    }
+
+    $recordsCombined = [];
+
+    foreach ($recordSums as $record) {
+        $sums = [
+            'rvw'   =>  0,
+            //'uc'    =>  0,
+            'tm'    =>  0,
+            'fp'    =>  0,
+        ];
+        if (isset($status->sums[$record])) {
+            foreach ($sums as $key => $value) {
+                $sums[$key] = $status->sums[$record][$key];
+            }
+        }
+        if (isset($status->icij->sums[$record])) {
+            foreach ($sums as $key => $value) {
+                $sums[$key] += $status->icij->sums[$record][$key];
+            }
+        }
+        if (isset($status->mm->sums[$record])) {
+            foreach ($sums as $key => $value) {
+                $sums[$key] += $status->mm->sums[$record][$key];
+            }
+        }
+        $recordsCombined[$record] = $sums;
+    }
+
+    $jsObj->Attn          = $attn;
+    $jsObj->IsCurrent     = $status->isCurrent;
+    $jsObj->ReviewExplain = $reviewExplain;
+    $jsObj->Sums = $recordsCombined;
+    $jsObj->SumsCnt = count($recordsCombined);
+    $jsObj->AdjudicationReasons = getAdjudicationReasons($clientID, 'Both', 98);
+    break;
+
+case 'load-help':
+    if ($id = trim((string) $_POST['id'])) {
+        $jsObj->HelpObj = mkHelpObj($id);
+        $jsObj->Result = 1;
+    }
+    break;
+
+case 'media-monitor':
+    // For search click or a poller return trip
+    $apiID = (!empty($_POST['apiID'])) ? (int)$_POST['apiID'] : 0;
+    if (isset($_POST['polymorphicID']) && isset($_POST['idType'])) {
+        $polymorphicID = intval($_POST['polymorphicID']);
+        $idType = strtolower((string) $dbCls->escape_string($_POST['idType']));
+    } else {
+        throw new \Exception('polymorphicID and idType are required');
+    }
+    $endDate = date('Y-m-d');
+    $startDate = date('Y-m-d', strtotime('-3 months'));
+
+    $refine = trim($_POST['refinement'] ?? '');
+    $term = isset($_POST['term']) ? trim((string) $_POST['term']) : null;
+    $legacyVal = $mmModel->legacyValidationReport($term, $refine);
+
+    if ($legacyVal->Results['validation'] !== true) {
+        $jsObj = $legacyVal;
+        break;
+    }
+
+    if ($idType !== 'person') {
+        $nameFrom = isset($_POST['nameFrom']) ? $dbCls->escape_string($_POST['nameFrom']) : null;
+    } else {
+        $nameFrom = null;
+    }
+
+    $requestParams = [
+        'term'          => $term,
+        'refine'        => $refine,
+        'polymorphicID' => $polymorphicID,
+        'idType'        => $idType,
+        'startDate'     => $startDate,
+        'endDate'       => $endDate,
+        'nameFrom'      => $nameFrom
+    ];
+
+    if (empty($apiID)) {
+        // Kick off an asynchronous search and either get back an existing apiID for an existing search or else a fresh apiID for a new search
+        $searchArgs = "'{$term}' '{$refine}' {$polymorphicID} '{$idType}' '{$startDate}' '{$endDate}' {$clientID} "
+            . (int)$_SESSION['currentThirdPartyID'] . " {$userID} " . (($nameFrom) ? "'{$nameFrom}' " : "'' ")
+            . "0 $e_spID " . true;
+        if (($srchRslts = $mmModel->search($searchArgs, '../../../', true))
+            && ($srchJSON = json_decode((string) $srchRslts)) && !empty($srchJSON->apiID)
+        ) {
+            $apiID = $srchJSON->apiID;
+        }
+        if (empty($apiID)) {
+            print_r($srchRslts);
+            throw new \Exception('Request irretrievable');
+        }
+    }
+
+    $jsObj->Results = ['apiID' => $apiID, 'hasResults' => 0];
+    $jsObj->mmSubject = [
+        'name' => $term,
+        'polymorphicID' => $polymorphicID,
+        'idType' => $idType,
+        'nameFrom' => $nameFrom
+    ];
+    $mmResults = [];
+    if ($mmModel->isSearchFinished($apiID)) {
+        $mmResults = $mmModel->getCachedResults(
+            $polymorphicID,
+            $idType,
+            $currentThirdPartyID,
+            true,
+            $nameFrom
+        );
+
+        // Determines results already adjudicated
+        if (is_array($mmResults) && count($mmResults) > 0) {
+            $jsObj->Results['hasResults'] = 1;
+            foreach ($mmResults as $index => $result) {
+                if ($mmModel->mmRsltWasAdjudicated($result['source_recid'])) {
+                    unset($mmResults[$index]);
+                } elseif (strlen(trim((string) $result['title'])) < 1) {
+                    $mmResults[$index]['title'] = '(article title not provided)';
+                }
+            }
+        }
+    }
+
+    $jsObj->mmResults = $mmResults;
+    $jsObj->searchParams = $requestParams;
+    $jsObj->polymorphicID = $polymorphicID;
+    $jsObj->idType = $idType;
+    $jsObj->nameFrom = $nameFrom;
+break;
+
+case 'load-mm-detail':
+    $id = (isset($_POST['source_recid'])) ? intval($_POST['source_recid']) : null;
+
+    if ($id == null) {
+        return;
+    }
+
+    $record = $mmModel->getMediaMonitorResult($id);
+
+    if ($record) {
+        $jsObj->Result = 1;
+        $jsObj->Record = (object) [];
+        $jsObj->Record->MM = true;
+        $jsObj->Record->Relevancy = $record['relevancy'] . '%';
+        $jsObj->Record->Name = $record['name'];
+        $jsObj->Record->MediaLink = $record['link'];
+        $jsObj->Record->Summary = $record['summary'];
+        $jsObj->Record->Published = date("m.d.y", strtotime((string) $record['published']));
+        if ($aiSummaryEnabled) {
+            $jsObj->Record->PublishedDate = date("d/m/Y", strtotime((string) $record['published']));
+        }
+        $jsObj->Record->Hash = $record['hash'] ?? '';
+        $jsObj->Record->screeningID = $record['screeningID'];
+        $jsObj->Record->tpID = $record['tpID'];
+        $jsObj->Record->RecType = $record['idType'];
+        $jsObj->Record->source_recid = $record['id'];
+        $jsObj->Mode = 'single';
+        $jsObj->IsCurrent = 1;
+        $jsObj->Flag = $record['determination'] ?? 'undetermined';
+
+        if (isset($record['refinement'])) {
+            $jsObj->Record->Refinement = $record['refinement'];
+        }
+
+    } else {
+        $jsObj->Result = 0;
+        $jsObj->ErrorTitle = 'Operation Failed';
+        $jsObj->ErrorMsg = 'Invalid result record reference';
+        return;
+    }
+
+    $currentReason = $record['reason'] ?? '';
+    $currentReasonID = $record['reasonID'] ?? '';
+    $adjudType = ($record['idType'] == 'person') ? 'Individual' : 'Entity';
+
+    $jsObj->AdjudicationReasons = getAdjudicationReasons($clientID, $adjudType, 128);
+    $currentReasonObj = (object) [
+        'reasonText' => htmlspecialchars_decode((string) $currentReason, ENT_QUOTES),
+        'reasonID' => $currentReasonID
+    ];
+
+    $jsObj->AdjudicationReasons['current'] = $currentReasonObj;
+break;
+
+}
+
+// Override normal headers to values more favorable to a JSON return value
+header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+header("Last-Modified: " . gmdate("D, d M Y H:i:s") . "GMT");
+header("Cache-Control: no-cache, must-revalidate");
+header("Pragma: no-cache");
+header("Content-Type: text/plain; charset=utf-8"); //JSON
+
+if ($useWsSecurity) {
+    $jsObj->gdcReviewAuth = PageAuth::genToken('gdcReviewAuth');
+}
+$jsData = json_encodeLF($jsObj);
+
+
+echo $jsData;
+
+
+// ======= Function ========== //
+
+/**
+ * Make help object for use with inline help
+ *
+ * @param string $id Help message identifier
+ *
+ * @return object Help object
+ */
+function mkHelpObj($id)
+{
+    $obj = new stdClass();
+    $obj->id = $id;
+    $obj->width = 200;
+    $obj->title = 'Undefined Help Topic';
+    $obj->msg = '(no help available)';
+    switch ($id) {
+    case 'gdc-1':
+        $obj->title = 'GDC Topic 1';
+        $obj->msg = 'Description of topic 1';
+        break;
+    case 'gdc-2':
+        $obj->title = 'GDC Topic 2';
+        $obj->msg = 'Some text describing topic 2';
+        break;
+    }
+    return $obj;
+}
+
+/**
+ * Gets the adjudication reasons associated with the feature provided - to get all adjudication reasons for a global
+ * non-feature specific implementation pass in 'Both' for the $type arg
+ *
+ * @param integer $clientID      g_tenants.id
+ * @param string  $type          'Entity' or 'Individual'
+ * @param integer $featureID     g_features.id e.g. 98 = Basic 3P Monitor, 128 = Media Monitor Enabled
+ *
+ * @return array
+ */
+function getAdjudicationReasons($clientID, $type, $featureID)
+{
+    global $dbCls;
+    global $real_globaldb;
+
+    $clientID  = (int)$clientID;
+    $type      = $dbCls->escape_string($type);
+    $featureID = (int)$featureID;
+
+    if ($type != 'Both') {
+        $isEntity     = ($type == 'Entity') ? 1 : 0;
+        $entityClause = "AND r.entity = {$isEntity}";
+    } else {
+        $entityClause = "";
+    }
+
+    $adjudicationReasons = [];
+
+    //get list of reasons to ignore for this client
+    $sql = "
+      SELECT reasonID FROM {$real_globaldb}.g_gdcAdjudicationReasonsHideTenantMap
+      WHERE tenantID = $clientID
+    ";
+    $sqlres = $dbCls->fetchArrayRows($sql);
+
+    $hideReasons = [];
+    if (is_array($sqlres) && count($sqlres) > 0) {
+        foreach ($sqlres AS $r) {
+            $hideReasons[] = array_shift($r);
+        }
+    }
+
+    // query for reasons
+    $reasonSql = "SELECT r.id, r.listText, r.noteText, r.association, GROUP_CONCAT(m.featureID SEPARATOR ',') "
+        . "AS features FROM {$real_globaldb}.g_gdcAdjudicationReasons AS r "
+        . "INNER JOIN {$real_globaldb}.g_gdcAdjudicationReasonsFeatureMap AS m "
+        . "ON (r.id = m.reasonID) WHERE r.tenantID IN (0, {$clientID}) {$entityClause} AND r.active = 1 "
+        . "AND m.featureID IN ({$featureID}) GROUP BY r.id"; // might need a unique clause?
+
+    $defaultReasons = $dbCls->fetchObjectRows($reasonSql);
+
+    if (is_array($defaultReasons) && count($defaultReasons) > 0) {
+        foreach ($defaultReasons as $reason) {
+            if (!in_array($reason->id, $hideReasons)) {
+                $reason->noteText = htmlspecialchars_decode((string) $reason->noteText, ENT_QUOTES);
+                $reason->listText = htmlspecialchars_decode((string) $reason->listText, ENT_QUOTES);
+                if ($reason->association == 1) {
+                    $adjudicationReasons['match'][] = $reason;
+                } else {
+                    $adjudicationReasons['falsePositive'][] = $reason;
+                }
+            }
+        }
+    }
+
+    // handle empty reasons
+    if (empty($adjudicationReasons['match'])) {
+        $adjudicationReasons['match'][] = [
+            'listText'    => 'No reasons available',
+            'noteText'    => 'No reasons available',
+            'association' => 1
+        ];
+        $adjudicationReasons['match'][] = [
+            'listText'    => 'No reasons available',
+            'noteText'    => 'No reasons available',
+            'association' => 0
+        ];
+    }
+
+    if (empty($adjudicationReasons['falsePositive'])) {
+        $adjudicationReasons['falsePositive'][] = [
+            'listText'    => 'No reasons available',
+            'noteText'    => 'No reasons available',
+            'association' => 1
+        ];
+        $adjudicationReasons['falsePositive'][] = [
+            'listText'    => 'No reasons available',
+            'noteText'    => 'No reasons available',
+            'association' => 0
+        ];
+    }
+
+    return $adjudicationReasons;
+}
+
+/**
+ * Get the thirdPartyProfile.id and g_tenants.id given a cases.id
+ *
+ * @param integer $caseID cases.id
+ *
+ * @return mixed
+ */
+function getTenantDetailsFromCase($caseID)
+{
+    global $dbCls;
+
+    $caseID = (int)$caseID;
+
+    // get the thirdPartyProfile.id and clientID of the tenant who owns the case
+    $tpq = "SELECT tpID, clientID FROM cases WHERE id = {$caseID}";
+
+    return $dbCls->fetchAssocRow($tpq);
+}

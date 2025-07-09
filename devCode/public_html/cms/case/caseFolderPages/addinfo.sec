@@ -1,0 +1,356 @@
+<?php
+require_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(TRUE, -1);
+require_once __DIR__ . '/../../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCaseAddInfo')) {
+    // The following prevents this condition from
+    // breaking PDF rendering
+    if (isset($toPDF) && $toPDF) {
+        echo 'Access denied.';
+        return;
+    }
+    else {
+        exit('Access denied.');
+    }
+}
+require_once __DIR__ . '/../../includes/php/'."funcs.php";
+// Check for login/Security
+fchkUser( "casehome" );
+require_once __DIR__ . '/../../includes/php/'."ddq_funcs.php";
+require_once __DIR__ . '/../../includes/php/'."country_state_ddl.php";
+include_once __DIR__ . '/../../includes/php/'.'Models/TPM/IntakeForms/IntakeFormQuestions.php';
+
+$pageTabs = getAssignedPageTabs(
+    $_SESSION['bDDQcreated'],
+    $_SESSION['clientID'],
+    ($_SESSION['ddqRow']['caseType'] ?? 0),
+    ($_SESSION['ddqRow']['ddqQuestionVer'] ?? ''),
+    'EN_US',
+    'addinfo'
+);
+
+  if( isset($_SESSION['currentCaseID']))
+    {
+      $subjectInfoDDRow = fGetSubInfoDDRow( $_SESSION['currentCaseID'] );
+      $_POST['addInfo'] = $subjectInfoDDRow[16];
+    }
+
+  if (($_SESSION['bDDQcreated'])
+      && $_SESSION['ddqRow'][107] != DUE_DILIGENCE_SHORTFORM
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM2
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM3
+      && $_SESSION['ddqRow'][107] != DUE_DILIGENCE_SHORTFORM_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM2_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM3_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM2
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM2_COPY85
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM3
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM4
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA_FORM2
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM2_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM3_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM4_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA_FORM2_RENEWAL
+      && !($_SESSION['ddqRow'][107] >= DDQ_SHORTFORM_2PAGE_1601
+          && $_SESSION['ddqRow'][107] <= DDQ_SHORTFORM_2PAGE_1620
+      )
+      && !($_SESSION['ddqRow'][107] >= DDQ_SHORTFORM_2PAGE_1701
+          && $_SESSION['ddqRow'][107] <= DDQ_SHORTFORM_2PAGE_1740
+      )
+      || isset($pageTabs['addinfo'])
+  ) {
+      // We need to load the  page questions from onlineQuestions
+      $_SESSION['aOnlineQuestions'] = foqLoadCompletePage( $_SESSION['clientID'],
+                                                           $_SESSION['languageCode'],
+                                                           $_SESSION['ddqRow'][107],
+                                                           'Additional Information',
+                                                           $_SESSION['ddqID']);
+  }
+?>
+
+<div style="padding:7px;">
+
+<?php
+  // If this is a  DDQ we need to display the Additional Information questions from the questionnaire instead of
+    // standard Add Info Text Area
+  if (($_SESSION['bDDQcreated'])
+      && $_SESSION['ddqRow'][107] != DUE_DILIGENCE_SHORTFORM
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM2
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM3
+      && $_SESSION['ddqRow'][107] != DUE_DILIGENCE_SHORTFORM_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM2_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_FORM3_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM2
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM2_COPY85
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM3
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM4
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA_FORM2
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM2_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM3_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGE_FORM4_RENEWAL
+      && $_SESSION['ddqRow'][107] != DDQ_SHORTFORM_2PAGEA_FORM2_RENEWAL
+      && !($_SESSION['ddqRow'][107] >= DDQ_SHORTFORM_2PAGE_1601
+          && $_SESSION['ddqRow'][107] <= DDQ_SHORTFORM_2PAGE_1620
+      )
+      && !($_SESSION['ddqRow'][107] >= DDQ_SHORTFORM_2PAGE_1701
+          && $_SESSION['ddqRow'][107] <= DDQ_SHORTFORM_2PAGE_1740
+      )
+      || isset($pageTabs['addinfo'])
+  ) {
+
+?>
+
+      <!-- This is a Generic Question Section, it won't even show up unless questions have been added for it in onlineQuestions-->
+      <p>
+      <table width="100%"  border="0">
+        <?php
+          // If there are any Generic Questions
+          if( isset($_SESSION['aOnlineQuestions']) && $_SESSION['aOnlineQuestions'] ) {
+              echo "<b>ADDITIONAL INFORMATION<br/></b>";
+
+              // Load up the ADINFO GENQUEST1 Section
+              foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow ) {
+                  // Find all of the KEY PERSON GENQUEST Section elements
+                  if( $aOnlineQuestionsRow[9] == "ADDINFO GENQUEST1" ) {
+                      echo( "<tr>\n" );
+                        foqPrintEchoLabel( $aOnlineQuestionsRow, 1, "40%" );
+                        foqEchoDDQvalue( $aOnlineQuestionsRow, 1, "58%" );
+                      echo( "</tr>" );
+                  }
+              }
+          } // if( $_SESSION['aOnlineQuestions'] )
+        ?>
+      </table>
+      </p>
+      <table width="639" border="0" cellspacing="5" cellpadding="5" class="paddiv">
+<?php
+        // Load up the ADDITIONAL INFORMATION Section
+        foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow ) {
+            // Find all of the ADDITIONAL INFORMATION Section elements
+            if( $aOnlineQuestionsRow[9] == "ADDITIONAL INFORMATION" ) {
+                echo( "<tr>" );
+                  foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 500 );
+                echo( "</tr>" );
+                echo( "<tr>" );
+                  foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 500 );
+                echo( "</tr>" );
+            }
+        } // end foreach
+
+       echo( "</table>" );
+
+       ?>
+      <p>&nbsp;</p>
+      <p>
+      <!-- This is a Generic Question Section, it won't even show up unless questions have been added for it in onlineQuestions-->
+      <table width="100%"  border="0">
+        <?php
+          // If there are any Generic Questions
+          if( isset($_SESSION['aOnlineQuestions']) && $_SESSION['aOnlineQuestions'] ) {
+              // Load up the ADINFO GENQUEST2 Section
+              foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow ) {
+                  // Find all of the KEY PERSON GENQUEST Section elements
+                  if( $aOnlineQuestionsRow[9] == "ADDINFO GENQUEST2" ) {
+                      echo( "<tr>\n" );
+                        foqPrintEchoLabel( $aOnlineQuestionsRow, 1, "40%" );
+                        foqEchoDDQvalue( $aOnlineQuestionsRow, 1, "58%" );
+                      echo( "</tr>" );
+                  }
+              }
+          } // end if( $_SESSION['aOnlineQuestions'] )
+        ?>
+      </table>
+      </p>
+
+
+<?php
+       $_SESSION['aOnlineQuestions'] = [];
+       unset( $_SESSION['aOnlineQuestions'] );
+
+      } //end if bDDQcreated
+      else { ?>
+<p>
+<b>ADDITIONAL INFORMATION<br/></b>
+
+<?php print ("<span class='no-trsl'>{$_POST['addInfo']}</span>"); ?>
+
+      </p>
+<?php  } // end else( !$_SESSION['bDDQcreated']  )?>
+
+
+
+
+<?php
+  if( $_SESSION['bDDQcreated'] )
+    {
+      echo( "<p class=\"pgbrk sect\">Authorization</p>" );
+      echo( "<hr width=\"100%\" size=\"1\" noshade=\"noshade\" />" );
+
+      // <p><b>AUTHORIZATION AND USE OF THIS FORM</b></p>
+      if ($onlineQuestionRow = foqGetOnlineQuestionsRow(  $_SESSION['clientID'], "TEXT_AUTHANDUSE_SECTIONHEAD",
+        $_SESSION['languageCode'], $_SESSION['ddqRow'][107],
+        $_SESSION['ddqID'] )) {
+          echo( "<p><b>$onlineQuestionRow[5]</b></p>" );
+      }
+
+      if ($onlineQuestionRow = foqGetOnlineQuestionsRow(  $_SESSION['clientID'], "TEXT_AUTH_DESC",
+        $_SESSION['languageCode'], $_SESSION['ddqRow'][107],
+        $_SESSION['ddqID'] )) {
+          echo( "$onlineQuestionRow[5]" );
+      }
+
+      echo( "<hr width=\"100%\" size=\"1\" noshade=\"noshade\" />" );
+
+    // Initialize $szCurDate for some ACLs
+    $szCurDate = substr((string) $_SESSION['ddqRow']['subByDate'], 0, 10);
+
+    // If this is an HCP we need the ACL from the ddq_hcp
+    // If a specific ACL ID recorded with this DDQ, load the explicit reference
+    $aclID = (int)$_SESSION['ddqRow']['aclID'];
+    if ($aclID > 0) {
+        $aclRes = loadAclById($_SESSION['clientID'], $aclID);
+    } else {
+        if( $_SESSION['ddqRow'][107] == DUE_DILIGENCE_HCPDI || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_HCPDI_RENEWAL) {
+            $aclRes = loadAcl($_SESSION['clientID'], getAclScopeID($_SESSION['ddqRow'][107]), $_SESSION['languageCode'], $_SESSION['ddqRow'][93], 'hcp');
+        } else {
+            //  SEC-2178: Incorrect ACL Version Displayed Before Questionnaire Submitted
+            $aclVersion = $_SESSION['ddqRow'][93];
+            if (empty($aclVersion)) {
+                $CProw      = fGetClientProfileRow($_SESSION['clientID'], 'ddqACLversion');
+                $aclVersion = $CProw['ddqACLversion'];   // clientProfile.ddqACLversion
+            }
+            $aclRes = loadAcl($_SESSION['clientID'], getAclScopeID($_SESSION['ddqRow'][107]), $_SESSION['languageCode'], $aclVersion);
+        }
+    }
+    if (strlen((string) $aclRes['content']) > 0) {
+        echo $aclRes['content'];
+    }
+  ?>
+  </p>
+
+</table>
+    <?php
+
+    // Make sure the question array is cleaned out in prep for next page
+    $_SESSION['aOnlineQuestions'] = [];
+    unset( $_SESSION['aOnlineQuestions'] );
+
+    // We need to load the  page questions from onlineQuestions
+    $_SESSION['aOnlineQuestions'] = foqLoadCompletePage( $_SESSION['clientID'], $_SESSION['languageCode'],
+                                                         $_SESSION['ddqRow'][107], 'Authorization',
+                                                         $_SESSION['ddqID']);
+
+          if( isset($_SESSION['aOnlineQuestions']) )
+            {
+
+
+              echo ("<table width=\"100%\"  border=\"0\">");
+
+              // Load up the AUTHORIZATION GENQUEST Section
+              foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+                {
+                  // Find all of the AUTHORIZATION GENQUEST Section elements
+                  if( $aOnlineQuestionsRow[9] == "AUTHORIZATION GENQUEST" )
+                    {
+                      echo( "<tr>\n" );
+                        foqPrintEchoLabel( $aOnlineQuestionsRow, 1, "45%" );
+                        foqEchoDDQvalue( $aOnlineQuestionsRow, 1, "50%" );
+                      echo( "</tr>" );
+                    }
+                }
+              echo ("</table>");
+
+
+              echo ("<p><b>SUBMITTED BY</b></p>");
+
+              echo ("<table width=\"760\" border=\"0\" class=\"paddiv\">");
+
+              //devDebug($_SESSION['aOnlineQuestions'], "aOnlineQuestionsRow");
+              //devDebug($_SESSION['ddqRow'], "ddqRow");
+
+
+              if($_SESSION['ddqRow']['status']=="submitted"){
+
+                  // Load up the SUBMITTED BY Section
+                  foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+                    {
+                      // Find all of the SUBMITTED BY Setction elements
+                      if( $aOnlineQuestionsRow[9] == "SUBMITTED BY" )
+                        {
+                          echo( "<tr>\n" );
+
+                            foqPrintEchoLabel( $aOnlineQuestionsRow, 1, "40%" );
+                            foqEchoDDQvalue( $aOnlineQuestionsRow, 1, "58%" );
+                          echo( "</tr>" );
+                        }
+                    }
+                    //Note: these will always display in spite of onlineQuestions settings.
+                    echo "<tr>\n";
+                    echo "<td class='boldData' width='400'>IP:</td>";
+                    echo "<td class='dataRow' width='58%'>".$_SESSION['ddqRow']['subByIP']."</td>";
+                    echo "</tr><tr>";
+                    echo "<td class='boldData' width='400'>Date:</td>";
+                    echo "<td class='dataRow' width='58%'>".$_SESSION['ddqRow']['subByDate']."</td>";
+                    echo "</tr>";
+             }
+
+              echo ("</table>");
+
+            } // if( $_SESSION['aOnlineQuestions'] )
+
+    $_SESSION['aOnlineQuestions'] = [];
+    unset( $_SESSION['aOnlineQuestions'] );
+
+    ?>
+
+
+<?php } // if( $_SESSION['bDDQcreated'] )  ?>
+
+
+<?php
+echo( "<table width=\"100%\" border=\"0\" cellspacing=\"8\" cellpadding=\"0\">" );
+
+        // Load up the Extended Question and Answer (eQ&A) Section
+        $IntakeFormQuestions =  new IntakeFormQuestions($_SESSION['clientID']);
+        $instancesID = null;
+
+        // Find intakeFormInstances.caseID = cases.id or move along
+        if ((int)$_SESSION['currentCaseID'] > 0) {
+            $instancesID = $IntakeFormQuestions->getInstanceIdByCaseId($_SESSION['currentCaseID']);
+        }
+
+        if ($instancesID) {
+
+            // find eQ&A
+            $sectionID = 6;  // 6 === 'Additional Information'
+            $cfg = $IntakeFormQuestions->getCfgByInstanceId($instancesID);
+            $intakeFormCfgID = $cfg['intakeFormCfgID'];
+            $languageCode = $cfg['languageCode'];
+            $eqa = $IntakeFormQuestions->getExtensionsBySectionID($sectionID, $intakeFormCfgID, $languageCode, $instancesID);
+
+            // Display eQ&A
+            if ($eqa && $eqa[0]) {
+                echo( "<tr>" );
+                echo( "<td colspan=\"2\">" );
+                echo( "<div style=\"margin-top:1em;\"><b>Extended Question & Answers</b></div></td>" );
+                echo( "</tr>" );
+                echo( "<tr><td colspan=\"2\"><div class=\"tblrule\">&nbsp;</div></td></tr>" );
+
+                $IntakeFormQuestions->display3PM($eqa);
+            }
+        }
+
+
+echo( "</table>" );
+?>
+
+</div>

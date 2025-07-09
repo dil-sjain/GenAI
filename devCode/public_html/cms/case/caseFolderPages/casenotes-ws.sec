@@ -1,0 +1,254 @@
+<?php
+/**
+ * AJAX handler for case notes. Also provide data for PDF
+ */
+
+if (defined('IN_SPL_PDF')) {
+    // prevent direct access
+    if (realpath($_SERVER['SCRIPT_FILENAME']) == __FILE__) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            return;
+        } else {
+            exit;
+        }
+    }
+    $isVendor = true;
+
+} else {
+    include_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+    $session->cms_logged_in(true, -1);
+    include_once __DIR__ . '/../../includes/php/'.'class_access.php';
+    $accCls = UserAccess::getInstance();
+    if (!$accCls->allow('accCaseNotes')) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            echo 'Access denied.';
+            return;
+        } else {
+            exit('Access denied.');
+        }
+    }
+    include_once __DIR__ . '/../../includes/php/'.'class_db.php';
+
+    // Really clear these _SESSION vars if they are set to NULL
+    // isset() returns false if value is set to NULL
+    $nulled = ['ddqID', 'clientID', 'caseID'];
+    foreach ($nulled as $v) {
+        if (isset($_SESSION[$v]) && $_SESSION[$v] === null) {
+            unset($_SESSION[$v]);
+        }
+    }
+    $splPDF = false;
+    if (!isset($toPDF)) {
+        $toPDF = false;
+    }
+
+    $clientID = $_SESSION['clientID'];
+    $caseID = $_SESSION['currentCaseID'];
+    $globaldb = GLOBAL_DB;
+
+    $isVendor = ($session->secure_value('userClass') == 'vendor');
+    $userClass =$session->secure_value('userClass');
+
+}
+require_once __DIR__ . '/../../includes/php/'.'funcs_misc.php';
+
+$e_caseID = intval($caseID);
+$e_clientID = intval($clientID);
+
+//devDebug($_GET, '_GET');
+//dbCls->dieOnQueryError = FALSE;
+
+// Really clear these _SESSION var is they are set to NULL
+// isset() returns FALSE if value is set to NULL
+$nulled = ['clientID', 'caseID'];
+foreach ($nulled as $v) {
+    if (isset($_SESSION[$v])) {
+        if ($_SESSION[$v] === null) {
+            unset($_SESSION[$v]);
+        }
+    }
+}
+
+$defOrderBy = 'subj';
+$allowOrderBy = ['subj' => 'n.subject', 'ndate' => 'n.created', 'owner' => 'u.lastName', 'cat' => 'nc.name'];
+
+if (isset($_GET['ord'])) {
+    $orderBy = $_GET['ord'];
+} else {
+    $orderBy = '';
+}
+
+if (!array_key_exists($orderBy, $allowOrderBy)) {
+    $orderBy = $defOrderBy;
+}
+
+// Get row counts
+$cntWhere = "WHERE caseID='$e_caseID' AND qID='' AND clientID='$e_clientID'";
+switch ($userClass) {
+case 'admin':
+    break;
+case 'client':
+    $cntWhere .= ' AND bInvestigator=0';
+    break;
+case 'vendor':
+    $cntWhere .= ' AND (bInvestigator = 1 OR bInvestigatorCanSee = 1)';
+    break;
+default:
+    $cntWhere .= ' AND 0';
+}
+$cnt = $dbCls->fetchValue("SELECT COUNT(*) AS cnt FROM caseNote $cntWhere");
+
+if (!$toPDF) {
+
+    $minPP = 15;
+    $maxPP = 100;
+    $si = intval($_GET['si']);
+    $pp = intval($_GET['pp']);
+    if (! in_array($pp, [15, 20, 30, 50, 75, 100])) {
+        $pp = $minPP;
+    }
+    $sortDir = ($_GET['dir'] == 'yui-dt-desc') ? 'yui-dt-desc' : 'yui-dt-asc';
+
+    // Calculate page (base 1), and validate startIndex (base 0)
+    if (!$cnt) {
+        $pg = 1;
+        $si = 0;
+    } else {
+        if ($si >= $cnt) {
+            $si = $cnt - 1;
+        }
+
+        $t = $si + 1;
+        $t -= ($si % $pp);
+        $si = $t - 1;
+        $pg = ($si / $pp) + 1;
+    }
+    if ($si < 0) {
+        $si = 0;
+    }
+
+} // !$toPDF
+
+$sortDir = strtoupper((($sortDir == 'yui-dt-asc') ? 'ASC': 'DESC'));
+
+// Construct JSON output
+$jsData = "{\"Response\":{\n"
+        . " \"Records\":[";
+$notesData = '[]';
+
+if ($cnt) {
+    if (!$toPDF) {
+        $orderLimit = "ORDER BY " . $allowOrderBy[$orderBy] . " $sortDir LIMIT $si, $pp";
+    } else {
+        $orderLimit = 'ORDER BY n.subject ASC';
+    }
+
+    $flds = "n.id AS dbid, "
+          . "nc.name AS cat, "
+          . "IF(n.ownerID = -1, 'n/a', u.lastName) AS owner, "
+          . "LEFT(n.created,10) AS ndate, "
+          . "n.subject AS subj, "
+          . "n.note";
+
+    $from = "FROM caseNote AS n "
+          . "LEFT JOIN noteCategory AS nc ON nc.id = n.noteCatID "
+          . "LEFT JOIN {$globaldb}.users AS u ON u.id = n.ownerID";
+
+    $where = "WHERE n.caseID='$e_caseID' AND n.qID='' AND n.clientID='$e_clientID'";
+    switch ($userClass) {
+    case 'admin':
+        break;
+    case 'client':
+        $where .= ' AND n.bInvestigator=0';
+        break;
+    case 'vendor':
+        $where .= ' AND (n.bInvestigator = 1 OR n.bInvestigatorCanSee = 1)';
+        break;
+    default:
+        $where .= ' AND 0';
+    }
+
+    $rows = $dbCls->fetchObjectRows("SELECT $flds $from $where $orderLimit");
+    //if ($dbCls->error())
+    //    devDebug($dbCls->error(), 'db err');
+
+    if (is_array($rows) && count($rows)) {
+        $limit = count($rows);
+        $fix = ['cat', 'owner', 'subj', 'note'];
+        if (!$toPDF) {
+            for ($i = 0; $i < $limit; $i++) {
+                foreach ($fix AS $f) {
+                    $rows[$i]->$f = quoteJSONdata($rows[$i]->$f);
+                }
+                $rows[$i]->del = ' ';
+            }
+            //devDebug($rows, '$rows');
+            $jsData .= substr(json_encodeLF($rows), 1, -1);
+        } else {
+            $notesData = '[';
+            for ($i = 0; $i < $limit; $i++) {
+                $row = $rows[$i];
+                foreach ($fix AS $f) {
+                    $row->$f = quoteJSONdata($row->$f);
+                }
+                $fmt = 'subj: "' . $row->subj . '", '
+                     . 'cat: "' . $row->cat . '", '
+                     . 'note: "'  . $row->note . '", '
+                     . 'ndate: "' . $row->ndate . '", '
+                     . 'owner: "' . $row->owner . '"';
+                $notesData .= (($i) ? ",\n  {" : '{') . $fmt . '}';
+            }
+            $notesData .= ']';
+            //devDebug($notesData, 'notes data');
+        }
+    }
+
+} // if $cnt
+
+$jsData .= "],\n";
+if (!$splPDF) {
+    $dbCls->close();
+}
+
+if (! $cnt) {
+    $cnt = '0';
+}
+
+if (!$toPDF) {
+
+    $jsData .= " \"Total\":$cnt,\n"
+            .  " \"RowsPerPage\":$pp,\n"
+            .  " \"Page\":$pg,\n"
+            .  " \"RecordOffset\":$si\n}\n}";
+
+    // Override normal headers to values more favorable to a JSON return value
+    header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+    header("Last-Modified: " . gmdate("D, d M Y H:i:s") . "GMT");
+    header("Cache-Control: no-cache, must-revalidate");
+    header("Pragma: no-cache");
+    //header("Content-Type: text/xml; charset=utf-8"); //AJAX
+    header("Content-Type: text/plain; charset=utf-8"); //JSON
+
+    //devDebug($jsData);
+
+    echo $jsData;
+
+} else {
+
+    if (empty($notesData)) {
+        $notesData = '[]';
+    }
+    echo <<<EOT
+
+<script type="text/javascript">
+YAHOO.namespace('cfData');
+YAHOO.cfData.notesData = $notesData;
+</script>
+
+EOT;
+
+}
