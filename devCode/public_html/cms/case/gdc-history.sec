@@ -1,0 +1,141 @@
+<?php
+/**
+ * List all GDC screening for case
+ */
+
+require_once __DIR__ . '/../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+require_once __DIR__ . '/../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+
+if (!$session->value('IN_CASE_HOME')
+    || $session->secure_value('userClass') != 'vendor'
+    || !isset($_SESSION['currentCaseID'])
+    || !($caseID = $_SESSION['currentCaseID'])
+    || !$accCls->allow('accCaseMng')
+) {
+    return;
+}
+
+$e_clientID = $clientID = $_SESSION['clientID'];
+$e_spID = $spID = $_SESSION['vendorID'];
+$e_caseID = intval($caseID);
+$spdb = GLOBAL_SP_DB;
+require_once __DIR__ . '/../includes/php/'.'class_db.php';
+require_once __DIR__ . '/../includes/php/'.'funcs_misc.php';
+
+$sql = "SELECT caseName, userCaseNum FROM cases "
+    . "WHERE id = '$e_caseID' AND clientID = '$e_clientID' LIMIT 1";
+[$caseName, $userCaseNum] = $dbCls->fetchArrayRow($sql);
+
+?>
+
+<div id="pgdiv2">
+
+<table summary="layout" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td valign="top">
+
+<h3>Screenings for <?php echo $caseName; ?></h3>
+
+<?php
+
+$currentScreeningID = $dbCls->fetchValue("SELECT id FROM $spdb.spGdcScreening "
+    . "WHERE caseID = '$e_caseID' AND clientID = '$e_clientID' AND spID = '$e_spID' "
+    . "ORDER BY id DESC LIMIT 1"
+);
+$sql = "SELECT s.id, s.created, s.needsReview, COUNT(r.id) AS subjects, "
+    . "SUM(r.matches) AS ttlmatches, SUM(r.hits) AS ttlhits, s.seq "
+    . "FROM $spdb.spGdcScreening AS s "
+    . "LEFT JOIN $spdb.spGdcResult AS r ON r.screeningID = s.id "
+    . "WHERE s.caseID = '$e_caseID' AND s.clientID = '$e_clientID' "
+    . "GROUP BY s.id "
+    . "ORDER BY s.id DESC";
+if ($rows = $dbCls->fetchObjectRows($sql)) {
+    echo <<< EOT
+<div class="indent"><table width="600" class="gray-sp" cellpadding="3" cellspacing="2">
+<tr>
+    <th>Screening #</th>
+    <th>Date Checked</th>
+    <th>Report Age</th>
+    <th width="12%" class="cent">Subjects</th>
+    <th width="12%" class="cent no-wrap">Found In</th>
+    <th width="12%" class="cent">Hits</th>
+    <th class="cent no-wrap">Needs Review?</th>
+</tr>
+
+EOT;
+
+    $rowcnt = 0;
+    foreach ($rows as $row) {
+        $altClr = ($rowcnt++ & 1) ? 'odd' : 'even';
+        $rowClick = '';
+        // show date (elapsed), number of subjects, matches, hits,  needs review (or superseded)
+        if ($row->needsReview) {
+            if ($row->id == $currentScreeningID) {
+                $review = 'Yes';
+            } else {
+                $review = '(superseded)';
+            }
+        } else {
+            $review = 'No';
+        }
+        $e_created = $created = substr((string) $row->created, 0, 10);
+        $userGdcNum = 'GDC-' . $userCaseNum . '-' . $row->seq;
+        $days = $dbCls->fetchValue("SELECT DATEDIFF(CURRENT_DATE, '$e_created') AS `days`");
+        $age = elapsedDays($days);
+        if ($days > 1) {
+            // not Today or Yesterday
+            $age .= ' ago';
+        }
+
+        echo <<< EOT
+<tr class="$altClr clk" onclick="gdcdata.loadScreening($row->id)"
+    title="Click to load screening">
+    <td>$userGdcNum</td>
+    <td>$created</td>
+    <td>$age</td>
+    <td class="cent">$row->subjects</td>
+    <td class="cent">$row->ttlmatches</td>
+    <td class="cent">$row->ttlhits</td>
+    <td class="cent">$review</td>
+</tr>
+
+EOT;
+    }
+    echo '</table>';
+} else {
+    // shouldn't happen
+    echo 'No GDC screenings found. ';
+}
+
+?>
+
+
+</td><td valign="top"></td>
+</tr>
+</table>
+
+
+</div>
+<script type="text/javascript">
+(function(o){
+    var Dom = YAHOO.util.Dom,
+        Event = YAHOO.util.Event;
+
+    Event.onDOMReady(function(o){
+        var runGdcBtn = new YAHOO.widget.Button('gdc-run',
+            {label: 'New Screening', type: 'button'}
+        );
+        runGdcBtn.on('click', function(o){
+            gdcdata.opRequest('gdc-run');
+        });
+    });
+
+Dom.setStyle('pgdiv2', 'overflow', 'auto');
+Dom.setStyle('pgdiv2', 'width', gdcdata.pgdivWidth + 'px');
+Dom.setStyle('pgdiv2', 'height', gdcdata.pgdivHeight + 'px' );
+Dom.setStyle('pgdiv2', 'display', 'block');
+
+})();
+</script>

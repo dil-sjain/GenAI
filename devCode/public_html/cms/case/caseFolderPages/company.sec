@@ -1,0 +1,1516 @@
+<?php
+/**
+ * Display case and company information on Case Folder Company tab
+ */
+
+require_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(TRUE, -1);
+require_once __DIR__ . '/../../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCaseMng')) {
+    // The following prevents this condition from
+    // breaking PDF rendering
+    if (isset($toPDF) && $toPDF) {
+        echo 'Access denied.';
+        return;
+    }
+    else {
+        exit('Access denied.');
+    }
+}
+require_once __DIR__ . '/../../includes/php/'."funcs.php";
+// Check for login/Security
+fchkUser("casehome");
+require_once __DIR__ . '/../../includes/php/'.'ddq_funcs.php';
+require_once __DIR__ . '/../../includes/php/'.'country_state_ddl.php';
+require_once __DIR__ . '/../../includes/php/'.'class_db.php';
+require_once __DIR__ . '/../../includes/php/'.'funcs_misc.php';
+if ($_SESSION['b3pAccess'] && $accCls->allow('acc3pMng')) {
+    include_once __DIR__ . '/../../includes/php/'.'funcs_thirdparty.php';
+}
+include_once __DIR__ . '/../../includes/php/'.'Models/TPM/IntakeForms/IntakeFormQuestions.php';
+if (!isset($userClass)) {
+    $userClass = $session->secure_value('userClass');
+}
+
+$isVendor = ($session->secure_value('userClass') == 'vendor');
+
+if ($userClass == 'vendor') {
+    include_once __DIR__ . '/../../includes/php/'.'class_popdate.php';
+    if (!isset($popDate)) {
+        $popDate = new popDateClass();
+    }
+}
+
+$caseID = 0;
+if (isset($_SESSION['currentCaseID'])) {
+    $caseID = $_SESSION['currentCaseID'];
+} else if (isset($_GET['id'])) {
+    $caseID = $_GET['id'] = intval($_GET['id']);
+}
+$e_caseID = intval($caseID);
+
+if (!is_numeric($caseID)) {
+    // The following prevents this condition from
+    // breaking PDF rendering
+    if (isset($toPDF) && $toPDF) {
+        echo 'Invalid caseID.';
+        return;
+    }
+    else {
+        exit('Invalid caseID.');
+    }
+}
+
+//Get the case row and validate user's access to it
+$caseRow = fGetCaseRow($caseID);
+if (!$caseRow) {
+    // The following prevents this condition from
+    // breaking PDF rendering
+    if (isset($toPDF) && $toPDF) {
+        return;
+    } else {
+        exit;
+    }
+}
+// Is there a biligual report? (> 0 if there is)
+$bilingualRpt = $caseRow['bilingualRpt'];
+
+$clientID = $_SESSION['clientID'];
+$PDO = new MySqlPdo(['clientID' => $clientID]);
+$isESGCaseType = intval($caseRow['caseType']) === ESG_INVESTIGATION;
+
+// distinguish between investigator access, and access because of a case task.
+$atManageCase = false;
+if ($userClass == 'vendor' && ($_SESSION['userType'] == VENDOR_ADMIN
+    || $caseRow['caseInvestigatorUserID'] == $_SESSION['id']))
+{
+    $atManageCase = true;
+}
+
+$intakeFormName = '';
+$LF = "\n";
+$showReview = false;
+if (!isset($toPDF) && isset($_SESSION['showRedFlagReview'])) {
+    $showReview = $_SESSION['showRedFlagReview'];
+    $cReviewContent = ['ScopeDeviation' => 'Scope not selected', 'ScopeDeviation-cls' => 'marg-top1e-in16p', 'DdqAlerts' => 'No due diligence questionnaire is associated with this case', 'DdqAlerts-cls' => 'marg-top1e-in16p', 'RedFlags' => 'Red Flags not found', 'RedFlags-cls' => 'marg-top1e-in16p'];
+}
+
+// Initialize review mode and scope tracking
+$showReviewTab = $showReviewPanel = false;
+if ($showReview) {
+    if ($_SESSION['cflagReviewTab']) {
+        $showReviewTab = true; // use reviewer tab
+    } else {
+        $showReviewPanel = true; // use review panel
+    }
+}
+$revVars = ['clientID'  => $clientID, 'caseID'    => $caseID, 'b3pAccess' => $_SESSION['b3pAccess'], 'b3pRisk'   => $_SESSION['b3pRisk'], 'caseRow'   => $caseRow, 'userClass' => $session->secure_value('userClass')];
+require_once __DIR__ . '/../../includes/php/'.'class_casereview.php';
+$reviewCls = new CaseReview($revVars);
+unset($revVars);
+$scopeDeviation = $reviewCls->getScopeDeviation();
+$advFinds = $reviewCls->getAdvFinds();
+$unexpectedResponses = $reviewCls->getUnexpectedResponses();
+
+if ($clientID == 72) { //@todo gitlab #1365 : remove, or replace with settings instead of client specific code
+    unset($reviewCls->advFindTypes['aaf'], $reviewCls->advFindTypes['caution']);
+}
+
+//don't show cautions or aafs for cases completed before this date
+$cutoffDate = strtotime('2019-03-23');
+if ($caseRow['caseStage'] == COMPLETED_BY_INVESTIGATOR) {
+    if (strtotime((string) $caseRow['caseCompletedByInvestigator']) < $cutoffDate) {
+        unset($reviewCls->advFindTypes['aaf'], $reviewCls->advFindTypes['caution']);
+    }
+} elseif ($caseRow['caseStage'] == ACCEPTED_BY_REQUESTOR) {
+    if (strtotime((string) $caseRow['caseAcceptedByRequestor']) < $cutoffDate) {
+        unset($reviewCls->advFindTypes['aaf'], $reviewCls->advFindTypes['caution']);
+    }
+}
+
+
+//don't show cautions or aafs for clients who do not use steele
+$useSteele = (intval($caseRow['caseAssignedAgent']) == 8) ? true : false;
+if ($caseRow['caseStage'] == COMPLETED_BY_INVESTIGATOR) {
+    if ($useSteele == false) {
+        unset($reviewCls->advFindTypes['aaf'], $reviewCls->advFindTypes['caution']);
+    }
+} elseif ($caseRow['caseStage'] == ACCEPTED_BY_REQUESTOR) {
+    if ($useSteele == false) {
+        unset($reviewCls->advFindTypes['aaf'], $reviewCls->advFindTypes['caution']);
+    }
+}
+
+
+// Load DDQ record
+$ddqTip = '';
+$ddqStatus = '';
+if ($_SESSION['ddqRow'] = fGetddqSubmittedRow($caseID)) {
+    $firstDdqAccess = $_SESSION['ddqRow']['firstAccess'];
+    $lastDdqAccess  = $_SESSION['ddqRow']['lastAccess'];
+    $ddqStatus      = $_SESSION['ddqRow']['status'];
+    switch ($ddqStatus) {
+    case 'active':
+        $ddqTip = 'Intake form awaiting completion by third party';
+        break;
+    case 'closed':
+        $ddqTip = 'Intake form closed prior to completion by third party';
+        break;
+    case 'submitted':
+        $ddqTip = 'Third party completed intake form';
+        break;
+    }
+}
+
+if ($showReview && $_SESSION['ddqRow']) {
+    if (!$unexpectedResponses->qualifiedYN) {
+        $cReviewContent['DdqAlerts'] = 'Response expectations not configured';
+    } elseif (!$unexpectedResponses->found) {
+        $cReviewContent['DdqAlerts'] = 'None';
+    } else {
+        $na = "<em>unanswered</em>";
+        $txt = '<table width="100%" cellspacing="5" cellpadding="0">' . $LF
+            . '<tr>' . $LF
+            . '  <th width="80%" class="ta-left">Question</th>' . $LF
+            . '  <th width="10%">Expected</th>' . $LF
+            . '  <th width="10%">Response</th>' . $LF
+            . '</tr>' . $LF;
+        foreach ($unexpectedResponses->pgTabs as $tabName => $tabInfo) {
+            if (!count($tabInfo['unexpected'])) {
+                continue;
+            }
+            // new subsection
+            $sect = '[' . $tabInfo['abbr'] . '] ' . $tabName;
+            $txt .= '<tr>' . $LF
+                . '  <td colspan="3" class="ta-cent indentTable" bgcolor="#d0d0d0">'
+                . '<b>Intake Form Page &ndash; '
+                . $sect . '</b></td>' . $LF
+                . '</tr>' . $LF;
+            foreach ($tabInfo['unexpected'] as $qID => $yn) {
+                $expected = ($yn->expected == '') ? $na: $yn->expected;
+                $response = ($yn->response == '') ? $na: $yn->response;
+                $txt .= '<tr>' . $LF
+                    . '  <td>' . $yn->labelText . '</td>' . $LF
+                    . '  <td class="ta-cent">' . $expected . '</td>' . $LF
+                    . '  <td class="ta-cent redflag">'
+                    . $response . '</td>' . $LF
+                    . '</tr>' . $LF;
+            }
+        }
+        $txt .= '</table>';
+        $cReviewContent['DdqAlerts'] = $txt;
+        $cReviewContent['DdqAlerts-cls'] = 'marg-top1e-in11p';
+    }
+}
+
+// If Case Stages and Description haven't already been loaded, lets do it
+if ( !isset($_SESSION['caseStageList']) ) {
+  $_SESSION['caseStageList'] = fLoadCaseStageList();
+}
+
+// If Case Type and Description haven't already been loaded, lets do it
+if ( !isset($_SESSION['caseTypeList']) ) {
+  $_SESSION['caseTypeList'] = fLoadCaseTypeList();
+}
+
+
+$_SESSION['caseTypeClientName'] = ($scopeDeviation->completed) ? $scopeDeviation->selected: '';
+
+$e_spID = $spID = intval($caseRow['caseAssignedAgent']);
+$iProfileRow = false;
+$iCompany = '';
+$isSpLite = false;
+if ($spID) {
+    $iSql = "SELECT investigatorName, bFullSp, investigatorEmail, investigatorPhone\n"
+        . "FROM " . GLOBAL_SP_DB . ".investigatorProfile\n"
+        . "WHERE id = '$e_spID' LIMIT 1";
+    if ($iProfileRow = $dbCls->fetchObjectRow($iSql)) {
+        $iCompany = $iProfileRow->investigatorName;
+        $isSpLite = ($iProfileRow->bFullSp == 0);
+    }
+}
+
+if ($scopeDeviation->differs) {
+    $cReviewContent['ScopeDeviation'] = <<<EOT
+<table cellspacing="5" cellpadding="0">
+  <tr>
+    <td>Recommended Scope:</td>
+    <td>$scopeDeviation->recommended</td>
+  </tr>
+  <tr>
+    <td class="redflag">Changed to:</td>
+    <td class="redflag">$scopeDeviation->selected</td>
+  </tr>
+  <tr>
+    <td valign="top">User explanation:</td>
+    <td valign="top">$scopeDeviation->explain</td>
+  </tr>
+</table>
+
+EOT;
+
+    $cReviewContent['ScopeDeviation-cls'] = 'marg-top1e-in11p';
+} elseif (!$scopeDeviation->completed) {
+    $cReviewContent['ScopeDeviation'] = 'Due diligence not completed';
+} elseif (!$scopeDeviation->applies) {
+    $cReviewContent['ScopeDeviation'] = 'Recommendation not available';
+} elseif ($scopeDeviation->applies && !$scopeDeviation->differs) {
+    $cReviewContent['ScopeDeviation'] = 'None';
+}
+
+$_POST['caseName'] = $caseRow[1];
+$_POST['caseDescription'] = $caseRow[2];
+$_POST['caseType'] = $scopeDeviation->selected;
+$_POST['region'] = $caseRow[4];
+$_POST['regionName'] = fGetRegionName( $_POST['region'] );
+$_POST['dept'] = $caseRow[5];
+$_POST['deptName'] = fGetDepartmentName( $_POST['dept'] );
+$_POST['casePriority'] = $caseRow[6];
+$_POST['caseStage'] = $caseRow[9];
+$_POST['caseAssignedDate'] = $caseRow[11];
+$_POST['caseAcceptedByInvestigator'] = $caseRow[13];
+$_POST['caseCompletedByInvestigator'] = $caseRow[15];
+$_POST['caseAcceptedByRequestor'] = $caseRow[16];
+$_POST['caseDueDate'] = $caseRow[21];
+$_POST['budgetAmount'] = $caseRow[19];
+$_POST['billingCode'] = $caseRow[22];
+$_POST['userCaseNum'] = $caseRow[23];
+$_POST['acceptingInvestigatorID'] = $caseRow[24];
+$_POST['rejectReason'] = $caseRow[25];
+$_POST['rejectDescription'] = $caseRow[26];
+$_POST['delivery'] = $caseRow['delivery'];
+
+$sql = "SELECT userEmail FROM " . GLOBAL_DB . ".users WHERE userid = :userid";
+$params = [':userid' => $caseRow[10]];
+$_POST['requestor'] = $PDO->fetchValue($sql, $params);
+
+// Investigator Information
+$iName = $iEmail = $iPhone = '';
+$delivery = $caseRow['delivery'];
+if ($delivery === '') {
+    $delivery = null;
+}
+$deliveryName = null;
+if (!$isSpLite) {
+    if ($delivery !== null) {
+        include_once __DIR__ . '/../../includes/php/Models/TPM/CaseMgt/DeliveryOption.php';
+        $deliveryName = (new DeliveryOption())->optionNameLookup($delivery);
+        if (empty($deliveryName)) {
+            $deliveryName = null;
+        }
+    }
+    if ($_SESSION['userType'] > VENDOR_ADMIN && $caseRow['assigningProjectMgrID']) {
+        // show project manager to client, if available
+        $iUserID = $caseRow['assigningProjectMgrID'];
+    } else {
+        // show actual investigator
+        $iUserID = $caseRow['caseInvestigatorUserID'];
+    }
+    $e_iUserID = intval($iUserID);
+    $iUserSql = "SELECT userName, userEmail, firstName, lastName, userPhone "
+        . "FROM " . GLOBAL_DB . ".users WHERE id = '$e_iUserID' LIMIT 1";
+    if ($iUser = $dbCls->fetchObjectRow($iUserSql)) {
+        $iName = ($isVendor) ? $iUser->lastName .', '. $iUser->firstName : $iUser->userName;
+        $iEmail = $iUser->userEmail;
+        $iPhone = $iUser->userPhone;
+    }
+} else {
+    $iName = '(not provided)';
+    if ($iProfileRow) {
+        $iEmail = $iProfileRow->investigatorEmail;
+        $iPhone = $iProfileRow->investigatorPhone;
+    }
+    $splAuthSql = "SELECT iCompany, iName, iPhone, iEmail "
+        . "FROM " . REAL_GLOBAL_DB . ".g_spLiteAuth WHERE caseID = '$e_caseID' "
+        . "ORDER BY id DESC LIMIT 1";
+    if ($spAuthRow = $dbCls->fetchObjectRow($splAuthSql)) {
+        // Override values, if available
+        if ($spAuthRow->iCompany) {
+            $iCompany = $spAuthRow->iCompany;
+        }
+        if ($spAuthRow->iName) {
+            $iName = $spAuthRow->iName;
+        }
+        if ($spAuthRow->iEmail) {
+            $iEmail = $spAuthRow->iEmail;
+        }
+        if ($spAuthRow->iPhone) {
+            $iPhone = $spAuthRow->iPhone;
+        }
+    }
+}
+
+// Get the Subject Info Row
+$subjectInfoDDRow = fGetSubInfoDDRow($caseID);
+if (empty($subjectInfoDDRow) || !is_array($subjectInfoDDRow)) {
+    // hate to do this, but need a quick way to fix all the "trying to get" errors this page spawns
+    // when the caseType doesn't use subInfoDD (yes, we actually have some of those now. wow)
+    // using 60 below as the highest integer in this file is 57 on the crusty int based results
+    $subjectInfoDDRow = [];
+    for ($i=0; $i<=60; $i++) {
+        $subjectInfoDDRow[$i] = '';
+    }
+}
+$relRow = fGetRelationshipTypeRow( $subjectInfoDDRow[3] );
+$_POST['subStat'] = $subjectInfoDDRow[4];
+if (!empty($relRow)) {
+    $_POST['subType'] = $relRow[2];
+} else {
+    $_POST['subType'] = '';
+}
+$_POST['legalForm'] = $subjectInfoDDRow[5];
+$_POST['name'] = $subjectInfoDDRow[6];
+$_POST['street'] = $subjectInfoDDRow[7];
+$_POST['city'] = $subjectInfoDDRow[8];
+$_POST['country'] = matchCountryCodeToLegacyCode($subjectInfoDDRow[10]);
+$_POST['state'] = matchStateCodeToLegacyCode($subjectInfoDDRow[9], $_POST['country']);
+$_POST['pointOfContact'] = $subjectInfoDDRow[11];
+$_POST['phone'] = $subjectInfoDDRow[12];
+$_POST['emailAddr'] = $subjectInfoDDRow[13];
+$_POST['bAwareInvestigation'] = $subjectInfoDDRow[14];
+$_POST['addr2'] = $subjectInfoDDRow[18];
+$_POST['postCode'] = $subjectInfoDDRow[19];
+$_POST['mailDDquestionnaire'] = $subjectInfoDDRow[20];
+$_POST['principal1'] = $subjectInfoDDRow[21];
+$_POST['principal2'] = $subjectInfoDDRow[22];
+$_POST['principal3'] = $subjectInfoDDRow[23];
+$_POST['principal4'] = $subjectInfoDDRow[24];
+$_POST['POCposition'] = $subjectInfoDDRow[25];
+$_POST['pRelationship1'] = $subjectInfoDDRow[26];
+$_POST['pRelationship2'] = $subjectInfoDDRow[27];
+$_POST['pRelationship3'] = $subjectInfoDDRow[28];
+$_POST['pRelationship4'] = $subjectInfoDDRow[29];
+$_POST['SBIonPrincipals'] = $subjectInfoDDRow[30];
+$_POST['DBAname'] = $subjectInfoDDRow[57];
+
+// Get Investigator User Information
+if ($invUserRow = fGetUserRow( $_POST['acceptingInvestigatorID'] )) {
+    $_POST['acceptInvName'] = $invUserRow[3];
+} else {
+    $_POST['acceptInvName'] = '';
+}
+
+// Get Requestor User Name
+if ($reqUserRow = fGetUserRowByUserID( $_POST['requestor'] )) {
+    $_POST['requestorName'] = $reqUserRow[3];
+} else {
+    $_POST['requestorName'] = '';
+}
+
+// If the case was rejected, what was the rejection code
+if( ($_POST['caseStage'] == CASE_CANCELED) || ($_POST['caseStage'] == CLOSED) ||
+    ($_POST['caseStage'] == CLOSED_HELD) || ($_POST['caseStage'] == CLOSED_INTERNAL) )
+$rejectCaseCodeRow = fGetRejectCaseCodeRow( $_POST['rejectReason'] );
+
+include __DIR__ . '/../../includes/php/'.'dbcon.php';
+$stateName = getStateName($_POST['state']);
+$_POST['stateName'] = (!empty($stateName)) ? $stateName : 'None';
+
+$countryRow = fGetCountryRow( $_POST['country'] );
+$_POST['countryName'] = (!empty($countryRow[1]) ? $countryRow[1] : '');
+
+
+  $szBudgetAmount = ( $_SESSION['userType'] >= VENDOR_ADMIN ? sprintf("$ %0.0f (USD)", $_POST['budgetAmount']) : "" );
+  include __DIR__ . '/../../includes/php/'."dbcon.php";
+  $e_langCode = 'EN_US';
+  if (!empty($_SESSION['ddqRow'])) {
+    $e_langCode = preg_replace("/[^a-zA-Z0-9_\s]/", "", (string) $_SESSION['ddqRow'][111]);
+  }
+  $result = mysqli_query(MmDb::getLink(), "SELECT `langNameEng` FROM `languages` WHERE `langCode` = '$e_langCode'" );
+  $langName = mysqli_fetch_array($result);
+  mysqli_free_result( $result );
+  $origin = (isset($_SESSION['bDDQcreated']) && $_SESSION['bDDQcreated']) ? "Due Diligence Questionnaire" :'Manual Creation';
+
+  // Build key to ddqNames and pull Name so we can display it below
+  $legacyID = '';
+  if (isset($_SESSION['ddqRow'])) {
+    $legacyID = "L-" . $_SESSION['ddqRow']['caseType'] . $_SESSION['ddqRow']['ddqQuestionVer'];
+  }
+  $e_legacyID = preg_replace("/[^-a-zA-Z0-9_\s]/", "", $legacyID);
+  $result = mysqli_query(MmDb::getLink(), "SELECT * FROM `ddqName` WHERE `legacyID` = '$e_legacyID' AND `clientID` = '$clientID'");
+  $intakeFormName = $intakeFormClass = "";
+  if (!empty($_SESSION['ddqRow'])) {
+    if ($ddqNameObject = mysqli_fetch_object($result)) {
+        $intakeFormName = $ddqNameObject->name;
+        $intakeFormClass = $ddqNameObject->formClass;
+    } else {
+        // contruct "legacy name"
+        $intakeFormName = 'L-' . $_SESSION['ddqRow']['caseType']
+            . $_SESSION['ddqRow']['ddqQuestionVer'];
+    }
+  }
+  mysqli_free_result($result);
+
+// setup the internal due date calendar for SP's.
+$intDueDateHtml = '';
+if ($userClass == 'vendor') {
+    if ($atManageCase) {
+        $showIDD = $popDate->mkField('spdate', $caseRow['internalDueDate']) .' '
+        .'<input type="hidden" name="org_spdate" id="org_spdate" '
+            .'value="'. $caseRow['internalDueDate'] .'" />';
+    } else {
+        $showIDD = $caseRow['internalDueDate'];
+    }
+
+    $intDueDateHtml = '<tr id="spDueDateTr">
+    <td class="no-wrap">Internal Due Date:</td>
+    <td>'. $showIDD .'</td>
+</tr>'."\n";
+
+}
+
+?>
+
+<!--Start Center Content-->
+<?php
+  //We Need the FORM Tag For Styling
+?>
+<div style="margin: 1em 8px 8px 8px;">
+<form class="cmsform">
+
+<div style="width:45%;float:right;" class="fw-normal">
+
+<?php if ($caseRow['caseSource'] != DUE_DILIGENCE_CS_AI_DD) { ?>
+<!-- Investigator Info -->
+<table cellspacing="10" cellpadding="0">
+<tr>
+  <td colspan="2" style="white-space:nowrap"><strong>INVESTIGATOR INFORMATION</strong></td>
+</tr>
+<tr><td colspan="2"><div class="tblrule">&nbsp;</div></td></tr>
+<tr>
+  <td width="110">Company:</td>
+  <td width="200" class="no-trsl"><?php echo $iCompany; ?></td>
+</tr><tr id="leadInvestigator">
+  <td>Investigator:</td>
+  <td class="no-trsl"><?php echo $iName; ?></td>
+</tr><tr id="leadInvestigatorEmail">
+  <td>Email:</td>
+  <td class="no-trsl"><?php echo $iEmail; ?></td>
+</tr>
+<?php
+echo $intDueDateHtml;
+if ($deliveryName) { ?>
+<tr>
+  <td>Delivery:</td>
+  <td class="no-trsl"><?php echo $deliveryName; ?></td>
+</tr>
+<?php } elseif ($bilingualRpt) { ?>
+<tr>
+  <td>Bilingual Report:</td>
+  <td>Chinese</td>
+</tr>
+<?php } ?>
+</table>
+<?php } ?>
+
+<?php
+// begin case task listing.
+if ($userClass == 'vendor') {
+    $caseTasks = loc_getCaseTasks($caseID, $_SESSION['vendorID'], $caseRow['clientID'], $dbCls);
+    $ctTblDisplay = (!empty($caseTasks)) ? '' : ' style="display:none;"';
+
+    echo '<br /><br />
+<table cellspacing="0" cellpadding="2" id="ctTbl"'. $ctTblDisplay .'>
+<tr>
+    <td colspan="4" style="white-space:nowrap"><strong>CASE TASK INFORMATION</strong></td>
+</tr><tr>
+    <th width="80">Task</th>
+    <th width="80">Status</th>
+    <th width="110">Assignee</th>
+    <th class="printBtns">Actions</th>
+</tr>
+<tbody id="ctTblBody">';
+
+    // ctLast is a holding var for tasks that should be listed last. (deleted, rejected, etc.)
+    $ctLast = '';
+    if (!empty($caseTasks)) {
+        foreach ($caseTasks as $ct) {
+            // if user is here on case task access, only let them see their task(s).
+            if (!$atManageCase && $ct->userID != $_SESSION['id']) {
+                continue;
+            }
+            $ctOut = '<tr id="ctRow'. $ct->taskID .'">
+                <td>'. $ct->taskName .'</td>
+                <td>'. $ct->statusName .'</td>
+                <td>'. $ct->userName .'</td>
+                <td class="printBtns">
+                    <a href="javascript:void(0)" '
+                        .'onclick="_opRequest(\'vendor-viewTask\', \''.$ct->taskID .'\');">View</a>';
+
+                    if (isOSITask($spID, $session->secure_value('uTypeName'), $iUserID)) {
+                        $ctOut .= ' | '
+                            .'<a href="javascript:void(0)" '
+                            .'onclick="_opRequest(\'vendor-acceptTask\', \''.$ct->taskID .'\');">Edit</a>';
+                    } elseif ($atManageCase) {
+                        // only show edit capability if they can manage the case.
+                        $ctOut .=' | '
+                            .'<a href="javascript:void(0)" '
+                            .'onclick="_opRequest(\'vendor-editTask\', \''.$ct->taskID .'\');">Edit</a>';
+                    }
+                $ctOut .= '</td>
+            </tr>';
+            if ($ct->taskStatusID < 100) {
+                $ctLast .= $ctOut;
+            } else {
+                echo $ctOut;
+            }
+        } // end foreach;
+
+        // add a body wrapper if we have a ctLast.
+        if (!empty($ctLast)) {
+            $ctLast = "<tbody id=\"ctTblLast\">\n<tr><td colspan=\"4\">&nbsp;</td></tr>\n"
+                . $ctLast ."\n</tbody>";
+        }
+    } // end if case tasks;
+
+    echo '
+</tbody>
+'. $ctLast .'
+</table>';
+
+}
+
+// end case task listing.
+
+$compHdr = "";
+$advFindDetail = [];
+$redflagIndicated = '';
+if ($isESGCaseType) {
+    $advFindObjectTypes = [
+        'entity'    => 'Entity',
+        'principal' => 'Principal'
+    ];
+    $advFindGroups = [
+        'entity'    => [
+            'redflagentity',
+            'cautionentity',
+        ],
+        'principal' => [
+            'redflagprincipal',
+            'cautionprincipal',
+        ]
+    ];
+} else {
+    $advFindObjectTypes = [
+        'entity'    => 'Entity',
+    ];
+    $advFindGroups = [
+        'entity'    => [
+            'redflag',
+            'caution',
+            'aaf'
+        ],
+    ];
+}
+
+if ($_POST['caseStage'] >= COMPLETED_BY_INVESTIGATOR) {
+
+    switch ($_POST['caseStage']) {
+        case CLOSED:
+        case CLOSED_INTERNAL:
+        case CASE_CANCELED:
+        case CLOSED_HELD:
+            if (fbClientDanaher($_SESSION['clientID'])) {
+                $compHdr = "DETAILS ON APPROVAL OR REJECT";
+            } else {
+                $compHdr = "CASE REJECT/CLOSED DETAILS";
+            }
+            $explainPmt = 'Reason Code:';
+            $explain = '<span class="errormsg">' . $rejectCaseCodeRow[2] . '</span>';
+            $explain2Pmt = 'Explanation:';
+            $explain2 = $_POST['rejectDescription'];
+            $pmtWidth = 100;
+            break;
+
+        default:
+            if ($intakeFormClass == 'training') {
+                break;
+            }
+            $compHdr = "COMPLIANCE FINDINGS";
+            $explainPmtAdvFind = [];
+            $explainAdvFind = [];
+
+            foreach ($reviewCls->advFindTypes as $type => $name) {
+                $flagObjectType = ($isESGCaseType) ? ' ' . ucfirst((string) $advFinds->exFlags[$type][0]->objectType) : '';
+                $explainPmtAdvFind[$type] = sprintf('<span class="flex-fit redflag fw-normal">Potential %s Identified?</span>', $name);
+
+                if (array_key_exists($type, $advFinds->exFlags)) {
+                    $explainAdvFind[$type] = '<span class="redflag fw-normal">Yes</span>';
+                    $redflagIndicated = $explainAdvFind[$type];
+                } else {
+                    $explainAdvFind[$type] = '<span class="redflag fw-normal">No</span>';
+                    $redflagIndicated = 'None';
+                }
+                $pmtWidth = 125;
+                // any subscriber-defined red flags?
+                if (array_key_exists($type, $advFinds->exFlags)) {
+                    $advFindDetail[$type] = '<ul class="flags-list" style="margin-left: -15px">';
+                    foreach ($advFinds->exFlags[$type] as $rf) {
+                        $name = $rf->name;
+                        $name = explode('Only: ', (string) $name);
+                        $name = end($name);
+
+                        $advFindDetail[$type] .= '<li><span class="redflag" style="font-weight:normal;">'
+                            . $name;
+                        if ($rf->subtitle) {
+                            $subtitle = $rf->subtitle;
+                            $subtitle = explode('Only: ', (string) $subtitle);
+                            $subtitle = end($subtitle);
+                            $advFindDetail[$type] .= ' ('.$subtitle.')';
+                        }
+                        if ($advFinds->showNumbers) {
+                            $advFindDetail[$type] .= ' (' . $rf->howMany . ')';
+                        }
+                        $advFindDetail[$type] .= "</span></li>\n";
+                    }
+                    $advFindDetail[$type] .= '</ul>';
+                    $cReviewContent['RedFlags-cls'] = 'marg-top1e-in6p';
+                }
+            }
+    }
+
+    if ($compHdr) {
+?>
+
+<div style="margin-top:1.5em;">
+    <h2><b><?php echo $compHdr; ?></b></h2>
+    <?php
+    foreach ($advFindObjectTypes as $advFindObjectTypeKey => $advFindObjectTypeName) {
+    ?>
+<table class="flags-table" cellspacing="10" cellpadding="0">
+    <tr>
+        <td colspan="2"><h3 class="red-flag-group"><?php echo $advFindObjectTypeName; ?></h3></td>
+    </tr>
+<?php
+if (isset($explainPmtAdvFind) && isset($explainAdvFind)) {
+    foreach ($advFindGroups[$advFindObjectTypeKey] as $type) {
+        if ($isESGCaseType) {
+        ?>
+            <tr>
+                <td colspan="2"><h4 class="red-flag-type-label"><?php echo $reviewCls->advFindTypes[$type]; ?></h4></td>
+            </tr>
+        <?php
+        }
+        if (isset($explainPmtAdvFind[$type]) && isset($explainAdvFind[$type]) && isset($advFindDetail[$type])) {
+        ?>
+        <tr>
+            <td valign="top" width="<?php echo $pmtWidth?>"><?php echo $explainPmtAdvFind[$type]?></td>
+            <td valign="top"><?php echo $explainAdvFind[$type]?></td>
+        </tr>
+        <tr>
+            <td colspan="2">
+                <?php echo (array_key_exists($type, $advFindDetail)) ? $advFindDetail[$type] : ''; ?>
+            </td>
+        </tr>
+        <?php
+        }
+    }
+}
+if (isset($explainPmt)) {
+    ?>
+    <tr>
+        <td valign="top" width="<?php echo $pmtWidth?>"><?php echo $explainPmt?></td>
+        <td valign="top"><?php echo $explain?></td>
+    </tr>
+    <?php
+}
+
+if (isset($explain2Pmt)) {
+    ?>
+    <tr>
+        <td valign="top"><?php if (isset($explain2Pmt)) { echo $explain2Pmt; }?></td>
+        <td valign="top"><?php if (isset($explain2)) { echo $explain2; }?></td>
+    </tr>
+    <?php
+}
+    if ($isESGCaseType && $advFindObjectTypeKey === 'entity') {
+    ?>
+    <tr>
+        <td class="esg-composite-block" colspan="2">
+            <span class="esg-composite-label">ESG Composite Score:</span><span class="esg-composite-score"><?php echo $caseRow['esgEntityScore']; ?></span>
+        </td>
+    </tr>
+    <?php
+    }
+    ?>
+</table>
+<?php
+    }
+?>
+</div>
+
+    <?php } // if $compHdr
+    ?>
+<?php } // if caseStage >= completed by investigator
+?>
+
+</div>
+
+
+<!-- Case Info -->
+<table cellspacing="10" cellpadding="0">
+<tr>
+  <td colspan="2"><b>CASE INFORMATION</b></td>
+</tr>
+<tr><td colspan="2"><div class="tblrule">&nbsp;</div></td></tr>
+<tr>
+  <td>Case Source : </td>
+  <td><?php echo $caseRow['caseSource'] == DUE_DILIGENCE_CS_AI_DD ? 'AI DD Report' : $origin; ?></td>
+</tr>
+<?php if ($caseRow['caseSource'] != DUE_DILIGENCE_CS_AI_DD) { ?>
+<tr>
+  <td>Intake Form Source:</td>
+  <td>  <?php echo $origin; ?></td>
+</tr>
+<?php
+if ($_SESSION['bDDQcreated']) {
+    ?>
+    <tr>
+      <td>Intake Form Language:</td>
+      <td>  <?php echo $langName[0]; ?></td>
+    </tr>
+    <tr>
+      <td>Intake Form Version:</td>
+      <td title="<?php echo $ddqTip; ?>">  <?php echo $intakeFormName, " ($ddqStatus)"; ?></td>
+    </tr>
+    <?php
+}
+if (isset($firstDdqAccess) && $firstDdqAccess) {
+    ?>
+    <tr>
+        <td>3P First Login:</td>
+        <td><?php echo $firstDdqAccess; ?></td>
+    </tr>
+    <tr>
+        <td>3P Last Login:</td>
+        <td><?php echo $lastDdqAccess; ?></td>
+    </tr>
+    <?php
+} ?>
+<?php } ?>
+<tr><td colspan="2"><div style="line-height:.5em">&nbsp;</div></td></tr>
+<tr>
+  <td>Requestor:</td>
+  <td class="no-trsl"><?php echo $_POST['requestor']?></td>
+</tr>
+<tr>
+  <td width="195" class="no-trsl"><?php echo $_SESSION['regionTitle']?>: </td>
+  <td width="195" class="no-trsl"><?php echo $_POST['regionName']?></td>
+</tr>
+<tr>
+  <td class="no-trsl"><?php echo $_SESSION['departmentTitle']?>: </td>
+  <td class="no-trsl"><?php echo $_POST['deptName']?></td>
+</tr>
+<?php
+if ($caseRow['caseSource'] != DUE_DILIGENCE_CS_AI_DD) {
+require_once __DIR__ . '/../../includes/php/'.'class_BillingUnit.php';
+$buCls = new BillingUnit($clientID);
+echo $buCls->namesInTR($buCls->getNames($caseRow['billingUnit'], $caseRow['billingUnitPO']));
+if (isset($toPDF)) {
+    ?>
+    <tr>
+      <td>Scope of Due Diligence: </td>
+      <td><?php echo $scopeDeviation->selected; ?></td>
+    </tr>
+    <?php
+    if  ($scopeDeviation->differs) {
+        ?>
+        <tr>
+          <td><div class="no-wrap marg-rtsm redflag" style="margin-bottom:3px">Recommended:<img
+              src="<?php echo $sitepath; ?>images/spacer.gif" width="1" height="15"
+              alt="" /></div></td>
+          <td><div class="redflag"
+              style="margin-bottom:3px"><?php echo $scopeDeviation->recommended; ?> &nbsp; <img
+              src="<?php echo $sitepath; ?>images/alert16x16.png" alt=""></div></td>
+        </tr>
+        <?php
+    }
+} else {
+    if ($scopeDeviation->differs) {
+        ?>
+        <tr>
+          <td class="redflag">Scope of Due Diligence: </td>
+          <td><div class="no-wrap fw-normal redflag" style="margin-top:-6px"><?php
+            echo $scopeDeviation->selected; ?>
+            &nbsp; <img src="<?php echo $sitepath; ?>images/alert16x16.png" <?php
+        if ($showReviewPanel) {
+            echo 'title="Review Potential Compliance Issues" '
+                . 'alt="Review Potential Compliance Issues" class="img-link" '
+                . 'onclick="return _opRequest(\'show-review-panel\')" />';
+        } else {
+            echo 'title="Deviated from Recommended Scope" '
+                . 'alt="Deviated from Recommended Scope" />';
+        } ?>
+            </div></td>
+        </tr>
+        <?php
+    } else {
+        ?>
+        <tr>
+          <td>Scope of Due Diligence: </td>
+          <td><?php echo $scopeDeviation->selected; ?></td>
+        </tr>
+        <?php
+    }
+}
+} ?>
+<tr>
+  <td>Relationship Status:</td>
+  <td class="no-trsl"><?php echo $_POST['subStat']?></td>
+</tr>
+<tr>
+  <td>Relationship Type: </td>
+  <td class="no-trsl"><?php echo $_POST['subType']?></td>
+</tr>
+<?php if ($caseRow['caseSource'] != DUE_DILIGENCE_CS_AI_DD) { ?>
+<tr>
+  <td>Budget:</td>
+  <td><?php echo $szBudgetAmount?></td>
+</tr>
+<?php
+if ($_SESSION['cflagApproveDDQ'] && $caseRow['approveDDQ'])
+{
+    $apprDdqLabel = 'Approved DDQ:';
+    $apprDdqDate = substr((string) $caseRow['approveDDQ'], 0, 10);
+    ?>
+
+<tr>
+  <td><?php echo $apprDdqLabel?></td>
+  <td><?php echo $apprDdqDate?></td>
+</tr>
+
+    <?php
+}
+?>
+<tr>
+  <td>Est. Completion Date: </td>
+  <td><?php echo $_POST['caseDueDate']?></td>
+</tr>
+<tr>
+  <td>Is Subject Aware of Investigation?:</td>
+  <td><?php echo ($_POST['bAwareInvestigation'] ? 'Yes' : 'No')?></td>
+</tr>
+<?php } ?>
+<?php if( strlen($_POST['caseDescription']  ?? '') ) { ?>
+<tr>
+  <td colspan="2"><div style="margin-top:.5em;"><table cellpadding="0" cellspacing="0"><tr>
+      <td width="80">Brief Note:</td>
+      <td data-tl-ignore="1"><div style="font-weight:normal;border:1px solid #ccc; padding:5px;"><?php echo $_POST['caseDescription']?></div></td>
+    </tr></table></div></td>
+</tr>
+<?php } ?>
+
+</table>
+
+<div style="margin-bottom:1.5em;width:500px;height:1px;line-height:1px;clear:right;"></div>
+
+
+<!-- Company Info -->
+
+<?php if (!($_SESSION['bDDQcreated'])) {
+    // If this was a manually created case, use the static display below
+    ?>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+<tr>
+  <td colspan="2"><b>COMPANY DETAILS</b></td>
+</tr>
+<tr><td colspan="2"><div class="tblrule">&nbsp;</div></td></tr>
+<tr>
+  <td>Official Company Name:</td>
+  <td class="no-trsl"><?php echo $_POST['name']?></td>
+</tr>
+<tr>
+  <td>Alternate Trade Name(s):</td>
+  <td class="no-trsl"><?php echo $_POST['DBAname']?></td>
+</tr>
+<tr>
+  <td width="277"> </td>
+  <td> </td>
+</tr>
+<tr>
+  <td width="277"><strong>Address: </strong></td>
+  <td>&nbsp;</td>
+</tr>
+<tr>
+  <td width="277">&nbsp;&nbsp;&nbsp;&nbsp;Address 1:</td>
+  <td class="no-trsl"><?php echo $_POST['street']?></td>
+</tr>
+<tr>
+  <td width="277">&nbsp;&nbsp;&nbsp;&nbsp;Address 2:</td>
+  <td class="no-trsl"><?php echo $_POST['addr2']?></td>
+</tr>
+
+<tr>
+  <td width="277">&nbsp;&nbsp;&nbsp;&nbsp;City:</td>
+  <td><?php echo $_POST['city']?> </td>
+</tr>
+<tr>
+  <td width="277">&nbsp;&nbsp;&nbsp;&nbsp;<?php echo $accCls->trans->codeKey('country') ?>:</td>
+  <td><?php echo $_POST['countryName']?> </td>
+</tr>
+<tr>
+  <td width="277">&nbsp;&nbsp;&nbsp;&nbsp;State/Province:</td>
+  <td><?php echo $_POST['stateName']?></td>
+</tr>
+<tr>
+  <td width="277">&nbsp;&nbsp;&nbsp;&nbsp;Postcode: </td>
+  <td class="no-trsl"><?php echo $_POST['postCode']?></td>
+</tr>
+<tr>
+  <td nowrap="nowrap">Legal Form of Company: </td>
+  <td>
+    <?php
+      $row = fGetCompanyLegalFormRow( $_POST['legalForm'] );
+      if (!empty($row)) {
+          echo( "$row[2]" );
+      }
+    ?>      </td>
+</tr>
+<tr>
+  <td width="277"><?php echo $accCls->trans->codeKey('country') ?> of Registration: </td>
+  <td class="no-trsl">
+    <?php
+    if (!empty($_SESSION['ddqRow'])) {
+       $row = fGetCountryRow( $_SESSION['ddqRow'][18] );
+       if (!empty($row)) {
+           echo( $row[1] );
+       }
+    }
+    ?>      </td>
+</tr>
+
+<tr>
+  <td colspan="2"><div style="margin-top:1em;"><b>MAIN POINT OF CONTACT</b></div></td>
+</tr>
+<tr><td colspan="2"><div class="tblrule">&nbsp;</div></td></tr>
+<tr>
+  <td width="277">Name: </td>
+  <td class="no-trsl"><?php echo $_POST['pointOfContact']?>  </td>
+</tr>
+<tr>
+  <td width="277">Position: </td>
+  <td class="no-trsl"><?php echo $_POST['POCposition']?>  </td>
+</tr>
+<tr>
+  <td width="277">Telephone: </td>
+  <td class="no-trsl"><?php echo $_POST['phone']?>  </td>
+</tr>
+<tr>
+  <td width="277">Email Address: </td>
+  <td class="no-trsl"><?php echo $_POST['emailAddr']?> </td>
+</tr>
+</table>
+
+    <?php
+    // end if (!($_SESSION['bDDQcreated']))
+} else {
+    // Case originated by DDQ
+
+    /*  <p class="pgbrk sect"><b>Authorization</b></p>
+    <hr width="100%" size="1" noshade="noshade" /> */
+
+    $haveCompanyDetails = [
+        DUE_DILIGENCE_SBI,
+        DUE_DILIGENCE_SHORTFORM,
+        DDQ_SBI_FORM2,
+        DDQ_SBI_FORM3,
+        DDQ_SBI_FORM4,
+        DDQ_SHORTFORM_2PAGE,
+        DDQ_SHORTFORM_2PAGEA,
+        DDQ_SHORTFORM_2PAGE_RENEWAL,
+        DDQ_SHORTFORM_2PAGEA_RENEWAL,
+        DDQ_SHORTFORM_2PAGE_FORM2,
+        DDQ_SHORTFORM_2PAGE_FORM2_COPY85,
+        DDQ_SHORTFORM_2PAGE_FORM3,
+        DDQ_SHORTFORM_2PAGE_FORM4,
+        DDQ_SHORTFORM_2PAGEA_FORM2,
+        DDQ_SHORTFORM_2PAGE_FORM2_RENEWAL,
+        DDQ_SHORTFORM_2PAGE_FORM3_RENEWAL,
+        DDQ_SHORTFORM_2PAGE_FORM4_RENEWAL,
+        DDQ_SHORTFORM_2PAGEA_FORM2_RENEWAL,
+        DDQ_SHORTFORM_5PAGENOBP,
+        DDQ_5PAGENOBP_FORM2,
+        DDQ_6PAGE_FORM1,
+        DDQ_6PAGE_FORM1_RENEWAL,
+        DDQ_6PAGE_FORM_MEDTRONIC1,
+        DDQ_6PAGE_FORM_MEDTRONIC2,
+        DDQ_6PAGE_FORM_MEDTRONIC3,
+        DDQ_6PAGE_FORM_MEDTRONIC4,
+        DDQ_5PAGENOBP_FORM3,
+        DDQ_4PAGE_FORM1,
+        DDQ_4PAGE_FORM2,
+        DDQ_SHORTFORM_3PAGECDKPACL1,
+        DDQ_SHORTFORM_3PAGECDKPACL2,
+        DUE_DILIGENCE_SBI_RENEWAL,
+        DUE_DILIGENCE_SBI_RENEWAL_2,
+        DDQ_SBI_FORM2_RENEWAL,
+        DDQ_SBI_FORM3_RENEWAL,
+        DDQ_SBI_FORM4_RENEWAL,
+        DDQ_SBI_FORM5,
+        DDQ_SBI_FORM5_RENEWAL,
+        DDQ_SBI_FORM6,
+        DDQ_SBI_FORM6_RENEWAL,
+        DDQ_SBI_FORM7,
+        DDQ_SBI_FORM7_RENEWAL,
+        DDQ_SHORTFORM_FORM2,
+        DDQ_SHORTFORM_FORM3,
+        DUE_DILIGENCE_SHORTFORM_RENEWAL,
+        DDQ_SHORTFORM_FORM2_RENEWAL,
+        DDQ_SHORTFORM_FORM3_RENEWAL,
+        DDQ_SHORTFORM_4PAGE,
+        DDQ_SHORTFORM_4PAGE_RENEWAL,
+        DDQ_OSI_FORM,
+        // TPM-4103, 50 DDQs defined in app_defines.php inside loop; not likely to be recognized in IDE
+        DDQ_6PAGE_TYPE_1501,
+        DDQ_6PAGE_TYPE_1502,
+        DDQ_6PAGE_TYPE_1503,
+        DDQ_6PAGE_TYPE_1504,
+        DDQ_6PAGE_TYPE_1505,
+        DDQ_6PAGE_TYPE_1506,
+        DDQ_6PAGE_TYPE_1507,
+        DDQ_6PAGE_TYPE_1508,
+        DDQ_6PAGE_TYPE_1509,
+        DDQ_6PAGE_TYPE_1510,
+        DDQ_6PAGE_TYPE_1511,
+        DDQ_6PAGE_TYPE_1512,
+        DDQ_6PAGE_TYPE_1513,
+        DDQ_6PAGE_TYPE_1514,
+        DDQ_6PAGE_TYPE_1515,
+        DDQ_6PAGE_TYPE_1516,
+        DDQ_6PAGE_TYPE_1517,
+        DDQ_6PAGE_TYPE_1518,
+        DDQ_6PAGE_TYPE_1519,
+        DDQ_6PAGE_TYPE_1520,
+        DDQ_6PAGE_TYPE_1521,
+        DDQ_6PAGE_TYPE_1522,
+        DDQ_6PAGE_TYPE_1523,
+        DDQ_6PAGE_TYPE_1524,
+        DDQ_6PAGE_TYPE_1525,
+        DDQ_6PAGE_TYPE_1526,
+        DDQ_6PAGE_TYPE_1527,
+        DDQ_6PAGE_TYPE_1528,
+        DDQ_6PAGE_TYPE_1529,
+        DDQ_6PAGE_TYPE_1530,
+        DDQ_6PAGE_TYPE_1531,
+        DDQ_6PAGE_TYPE_1532,
+        DDQ_6PAGE_TYPE_1533,
+        DDQ_6PAGE_TYPE_1534,
+        DDQ_6PAGE_TYPE_1535,
+        DDQ_6PAGE_TYPE_1536,
+        DDQ_6PAGE_TYPE_1537,
+        DDQ_6PAGE_TYPE_1538,
+        DDQ_6PAGE_TYPE_1539,
+        DDQ_6PAGE_TYPE_1540,
+        DDQ_6PAGE_TYPE_1541,
+        DDQ_6PAGE_TYPE_1542,
+        DDQ_6PAGE_TYPE_1543,
+        DDQ_6PAGE_TYPE_1544,
+        DDQ_6PAGE_TYPE_1545,
+        DDQ_6PAGE_TYPE_1546,
+        DDQ_6PAGE_TYPE_1547,
+        DDQ_6PAGE_TYPE_1548,
+        DDQ_6PAGE_TYPE_1549,
+        DDQ_6PAGE_TYPE_1550,
+        // TPM-9335 added 20 new 2-page DDQ definitions that behave like DDQ_SHORTFORM_2PAGE
+        DDQ_SHORTFORM_2PAGE_1601,
+        DDQ_SHORTFORM_2PAGE_1602,
+        DDQ_SHORTFORM_2PAGE_1603,
+        DDQ_SHORTFORM_2PAGE_1604,
+        DDQ_SHORTFORM_2PAGE_1605,
+        DDQ_SHORTFORM_2PAGE_1606,
+        DDQ_SHORTFORM_2PAGE_1607,
+        DDQ_SHORTFORM_2PAGE_1608,
+        DDQ_SHORTFORM_2PAGE_1609,
+        DDQ_SHORTFORM_2PAGE_1610,
+        DDQ_SHORTFORM_2PAGE_1611,
+        DDQ_SHORTFORM_2PAGE_1612,
+        DDQ_SHORTFORM_2PAGE_1613,
+        DDQ_SHORTFORM_2PAGE_1614,
+        DDQ_SHORTFORM_2PAGE_1615,
+        DDQ_SHORTFORM_2PAGE_1616,
+        DDQ_SHORTFORM_2PAGE_1617,
+        DDQ_SHORTFORM_2PAGE_1618,
+        DDQ_SHORTFORM_2PAGE_1619,
+        DDQ_SHORTFORM_2PAGE_1620,
+
+        // TPM-10491 added 40 new 2-page DDQ definitions that behave like DDQ_SHORTFORM_2PAGE
+        DDQ_SHORTFORM_2PAGE_1701,
+        DDQ_SHORTFORM_2PAGE_1702,
+        DDQ_SHORTFORM_2PAGE_1703,
+        DDQ_SHORTFORM_2PAGE_1704,
+        DDQ_SHORTFORM_2PAGE_1705,
+        DDQ_SHORTFORM_2PAGE_1706,
+        DDQ_SHORTFORM_2PAGE_1707,
+        DDQ_SHORTFORM_2PAGE_1708,
+        DDQ_SHORTFORM_2PAGE_1709,
+        DDQ_SHORTFORM_2PAGE_1710,
+        DDQ_SHORTFORM_2PAGE_1711,
+        DDQ_SHORTFORM_2PAGE_1712,
+        DDQ_SHORTFORM_2PAGE_1713,
+        DDQ_SHORTFORM_2PAGE_1714,
+        DDQ_SHORTFORM_2PAGE_1715,
+        DDQ_SHORTFORM_2PAGE_1716,
+        DDQ_SHORTFORM_2PAGE_1717,
+        DDQ_SHORTFORM_2PAGE_1718,
+        DDQ_SHORTFORM_2PAGE_1719,
+        DDQ_SHORTFORM_2PAGE_1720,
+        DDQ_SHORTFORM_2PAGE_1721,
+        DDQ_SHORTFORM_2PAGE_1722,
+        DDQ_SHORTFORM_2PAGE_1723,
+        DDQ_SHORTFORM_2PAGE_1724,
+        DDQ_SHORTFORM_2PAGE_1725,
+        DDQ_SHORTFORM_2PAGE_1726,
+        DDQ_SHORTFORM_2PAGE_1727,
+        DDQ_SHORTFORM_2PAGE_1728,
+        DDQ_SHORTFORM_2PAGE_1729,
+        DDQ_SHORTFORM_2PAGE_1730,
+        DDQ_SHORTFORM_2PAGE_1731,
+        DDQ_SHORTFORM_2PAGE_1732,
+        DDQ_SHORTFORM_2PAGE_1733,
+        DDQ_SHORTFORM_2PAGE_1734,
+        DDQ_SHORTFORM_2PAGE_1735,
+        DDQ_SHORTFORM_2PAGE_1736,
+        DDQ_SHORTFORM_2PAGE_1737,
+        DDQ_SHORTFORM_2PAGE_1738,
+        DDQ_SHORTFORM_2PAGE_1739,
+        DDQ_SHORTFORM_2PAGE_1740,
+
+        //TPM-15142 new 100 6page form
+        DDQ_6PAGE_TYPE_1801,
+        DDQ_6PAGE_TYPE_1802,
+        DDQ_6PAGE_TYPE_1803,
+        DDQ_6PAGE_TYPE_1804,
+        DDQ_6PAGE_TYPE_1805,
+        DDQ_6PAGE_TYPE_1806,
+        DDQ_6PAGE_TYPE_1807,
+        DDQ_6PAGE_TYPE_1808,
+        DDQ_6PAGE_TYPE_1809,
+        DDQ_6PAGE_TYPE_1810,
+        DDQ_6PAGE_TYPE_1811,
+        DDQ_6PAGE_TYPE_1812,
+        DDQ_6PAGE_TYPE_1813,
+        DDQ_6PAGE_TYPE_1814,
+        DDQ_6PAGE_TYPE_1815,
+        DDQ_6PAGE_TYPE_1816,
+        DDQ_6PAGE_TYPE_1817,
+        DDQ_6PAGE_TYPE_1818,
+        DDQ_6PAGE_TYPE_1819,
+        DDQ_6PAGE_TYPE_1820,
+        DDQ_6PAGE_TYPE_1821,
+        DDQ_6PAGE_TYPE_1822,
+        DDQ_6PAGE_TYPE_1823,
+        DDQ_6PAGE_TYPE_1824,
+        DDQ_6PAGE_TYPE_1825,
+        DDQ_6PAGE_TYPE_1826,
+        DDQ_6PAGE_TYPE_1827,
+        DDQ_6PAGE_TYPE_1828,
+        DDQ_6PAGE_TYPE_1829,
+        DDQ_6PAGE_TYPE_1830,
+        DDQ_6PAGE_TYPE_1831,
+        DDQ_6PAGE_TYPE_1832,
+        DDQ_6PAGE_TYPE_1833,
+        DDQ_6PAGE_TYPE_1834,
+        DDQ_6PAGE_TYPE_1835,
+        DDQ_6PAGE_TYPE_1836,
+        DDQ_6PAGE_TYPE_1837,
+        DDQ_6PAGE_TYPE_1838,
+        DDQ_6PAGE_TYPE_1839,
+        DDQ_6PAGE_TYPE_1840,
+        DDQ_6PAGE_TYPE_1841,
+        DDQ_6PAGE_TYPE_1842,
+        DDQ_6PAGE_TYPE_1843,
+        DDQ_6PAGE_TYPE_1844,
+        DDQ_6PAGE_TYPE_1845,
+        DDQ_6PAGE_TYPE_1846,
+        DDQ_6PAGE_TYPE_1847,
+        DDQ_6PAGE_TYPE_1848,
+        DDQ_6PAGE_TYPE_1849,
+        DDQ_6PAGE_TYPE_1850,
+        DDQ_6PAGE_TYPE_1851,
+        DDQ_6PAGE_TYPE_1852,
+        DDQ_6PAGE_TYPE_1853,
+        DDQ_6PAGE_TYPE_1854,
+        DDQ_6PAGE_TYPE_1855,
+        DDQ_6PAGE_TYPE_1856,
+        DDQ_6PAGE_TYPE_1857,
+        DDQ_6PAGE_TYPE_1858,
+        DDQ_6PAGE_TYPE_1859,
+        DDQ_6PAGE_TYPE_1860,
+        DDQ_6PAGE_TYPE_1861,
+        DDQ_6PAGE_TYPE_1862,
+        DDQ_6PAGE_TYPE_1863,
+        DDQ_6PAGE_TYPE_1864,
+        DDQ_6PAGE_TYPE_1865,
+        DDQ_6PAGE_TYPE_1866,
+        DDQ_6PAGE_TYPE_1867,
+        DDQ_6PAGE_TYPE_1868,
+        DDQ_6PAGE_TYPE_1869,
+        DDQ_6PAGE_TYPE_1870,
+        DDQ_6PAGE_TYPE_1871,
+        DDQ_6PAGE_TYPE_1872,
+        DDQ_6PAGE_TYPE_1873,
+        DDQ_6PAGE_TYPE_1874,
+        DDQ_6PAGE_TYPE_1875,
+        DDQ_6PAGE_TYPE_1876,
+        DDQ_6PAGE_TYPE_1877,
+        DDQ_6PAGE_TYPE_1878,
+        DDQ_6PAGE_TYPE_1879,
+        DDQ_6PAGE_TYPE_1880,
+        DDQ_6PAGE_TYPE_1881,
+        DDQ_6PAGE_TYPE_1882,
+        DDQ_6PAGE_TYPE_1883,
+        DDQ_6PAGE_TYPE_1884,
+        DDQ_6PAGE_TYPE_1885,
+        DDQ_6PAGE_TYPE_1886,
+        DDQ_6PAGE_TYPE_1887,
+        DDQ_6PAGE_TYPE_1888,
+        DDQ_6PAGE_TYPE_1889,
+        DDQ_6PAGE_TYPE_1890,
+        DDQ_6PAGE_TYPE_1891,
+        DDQ_6PAGE_TYPE_1892,
+        DDQ_6PAGE_TYPE_1893,
+        DDQ_6PAGE_TYPE_1894,
+        DDQ_6PAGE_TYPE_1895,
+        DDQ_6PAGE_TYPE_1896,
+        DDQ_6PAGE_TYPE_1897,
+        DDQ_6PAGE_TYPE_1898,
+        DDQ_6PAGE_TYPE_1899,
+        DDQ_6PAGE_TYPE_1900
+
+    ];
+    if (in_array($_SESSION['ddqRow'][107], $haveCompanyDetails)) {
+        $keyToLoad = 'Company Details';
+    } else {
+        $keyToLoad = 'Professional Information';
+    }
+    $_SESSION['aOnlineQuestions'] = foqLoadCompletePage(
+        $_SESSION['clientID'], $_SESSION['languageCode'],
+        $_SESSION['ddqRow'][107], $keyToLoad, $_SESSION['ddqID']);
+
+    if (in_array($_SESSION['ddqRow'][107], $haveCompanyDetails)) {
+        // NULL Dont ADD stuff here
+     } else {
+         echo( " <p class=\"pgbrk\"></p>" );
+     }
+?>
+
+
+<table width="100%" border="0" cellspacing="8" cellpadding="0">
+  <tr>
+    <td colspan="3">
+    <?php
+    if (in_array($_SESSION['ddqRow'][107], $haveCompanyDetails)) {
+        $keyToLoad = 'TEXT_COMPANYDETAILS_SECTIONHEAD';
+    } else {
+        $keyToLoad = 'TEXT_PROFINFO_SECTIONHEAD';
+    }
+    if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], $keyToLoad)) {
+        echo "<b>$aQuestionRow[5]</b>";
+    } else {
+        echo "";
+    }
+
+    ?>
+    </td>
+  </tr>
+<?php
+    if (in_array($_SESSION['ddqRow'][107], $haveCompanyDetails)) {
+        // Load up the COMPANY DETAILS Section
+        foreach ($_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow) {
+            // Find all of the COMPANY DETAIL Section elements
+            if ($aOnlineQuestionsRow[9] == "COMPANY DETAILS") {
+                echo( "<tr>" );
+                  echo( "<td width=\"24\"></td>" );
+                  foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 275 );
+                  foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 340 );
+                echo( "</tr>" );
+              }
+          }
+        // end DUE_DILIGENCE_SBI
+    } else {
+        // Load up the PROFESSIONAL INFORMATION Section
+        foreach ($_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow) {
+            // Find all of the PROFESSIONAL INFORMATION Section elements
+            if ($aOnlineQuestionsRow[9] == "PROFESSIONAL INFORMATION") {
+                echo( "<tr width=\"1\">" );
+                echo( "<td width=\"1\"></td>" );
+                foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 275 );
+                foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 340 );
+                echo( "</tr>" );
+            }
+        }
+    }
+?>
+
+<?php
+    if (in_array($_SESSION['ddqRow'][107], $haveCompanyDetails)) {
+?>
+       <tr>
+         <td colspan="3">
+         <?php
+           if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_POC_SECTIONHEAD' )) {
+                echo( "<b>$aQuestionRow[5]</b>" );
+           } else {
+                echo "";
+           }
+         ?>
+         </td>
+       </tr>
+<?php
+        // Load up the MAIN POINT OF CONTACT Section
+        foreach ($_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow) {
+            // Find all of the MAIN POINT OF CONTACT Section elements
+            if ($aOnlineQuestionsRow[9] == "MAIN POINT OF CONTACT") {
+                if (empty($_SESSION['ddqRow'][$aOnlineQuestionsRow[11]])) {
+                    continue;
+                }
+                echo( "<tr>" );
+                echo( "<td width=\"24\"></td>" );
+                foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 275 );
+                foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 340 );
+                echo( "</tr>" );
+            }
+        }
+    }
+?>
+</table>
+
+    <?php
+  // End of ddq2 Page
+  // Make sure the question array is cleaned out in prep for next page
+  $_SESSION['aOnlineQuestions'] = [];
+  unset( $_SESSION['aOnlineQuestions'] );
+
+} // else Case originated by DDQ
+?>
+
+
+<?php
+echo( "<table width=\"100%\" border=\"0\" cellspacing=\"8\" cellpadding=\"0\">" );
+
+        // Load up the Extended Question and Answer (eQ&A) Section
+        $IntakeFormQuestions =  new IntakeFormQuestions($clientID);
+        $instancesID = null;
+
+        // Find intakeFormInstances.caseID = cases.id or move along
+        if ((int)$caseID > 0) {
+            $instancesID = $IntakeFormQuestions->getInstanceIdByCaseId($caseID);
+        }
+
+        if ($instancesID) {
+
+            // find eQ&A
+            $sectionID = 1;  // 1 === 'Company Details'
+            $cfg = $IntakeFormQuestions->getCfgByInstanceId($instancesID);
+            $intakeFormCfgID = $cfg['intakeFormCfgID'];
+            $languageCode = $cfg['languageCode'];
+            $eqa = $IntakeFormQuestions->getExtensionsBySectionID($sectionID, $intakeFormCfgID, $languageCode, $instancesID);
+
+            // Display eQ&A
+            if ($eqa && $eqa[0]) {
+                echo( "<tr>" );
+                echo( "<td colspan=\"2\">" );
+                echo( "<div style=\"margin-top:1em;\"><b>Extended Question & Answers</b></div></td>" );
+                echo( "</tr>" );
+                echo( "<tr><td colspan=\"2\"><div class=\"tblrule\">&nbsp;</div></td></tr>" );
+
+                $IntakeFormQuestions->display3PM($eqa);
+            }
+        }
+
+
+echo( "</table>" );
+?>
+
+</form>
+
+<?php
+if ($showReviewPanel) {
+    // cleanup for jasvascript
+    if (array_key_exists('redflag', $advFindDetail)) {
+        $cReviewContent['RedFlags'] = $advFindDetail['redflag'];
+    } elseif ($redflagIndicated) {
+        $cReviewContent['RedFlags'] = $redflagIndicated;
+    }
+    foreach ($cReviewContent AS $k => $v) {
+        if (str_ends_with((string) $k, '-cls')) {
+            continue;
+        }
+        $prefix = '<div class="' . $cReviewContent[$k . '-cls'] . '">';
+        $cReviewContent[$k] = str_replace('\/', '/', json_encode($prefix . $v . '</div>'));
+    }
+    ?>
+    <script type="text/javascript">
+    (function(){
+        var creview = YAHOO.creview;
+        creview.ready = true;
+        creview.ScopeDeviation = <?php echo $cReviewContent['ScopeDeviation']; ?>;
+        creview.DdqAlerts = <?php echo $cReviewContent['DdqAlerts']; ?>;
+        creview.RedFlags = <?php echo $cReviewContent['RedFlags']; ?>;
+    })();
+    </script>
+    <?php
+} // end if (showReviewPanel);
+?>
+
+</div>
+
+<!--End Center Content-->
+
+<?php
+if ($userClass == 'vendor') {
+    ?>
+    <script type="text/javascript">
+    (function(){
+        var pdt = YAHOO.pdt;
+        pdt.spSetDate = function() {
+            _opRequest('spDueDate');
+        };
+
+        pdt.setCallback('spdate', YAHOO.pdt.spSetDate);
+    })();
+    </script>
+    <?php
+} // end if (userClass == vendor);
+
+
+
+/**************************
+**    Local functions    **
+**************************/
+
+/**
+ * Local function for fetching a list of tasks assigned within a case.
+ *
+ * @param integer $caseID   ID of the current case
+ * @param integer $spID     ID of the current service provider
+ * @param integer $clientID ID of the current client associated with the current case
+ * @param object  $dbCls    Instance of the db class
+ *
+ * @return object Result of database query for assigned tasks
+ */
+function loc_getCaseTasks($caseID, $spID, $clientID, $dbCls) {
+    $caseID = (int)$caseID;
+    $spID = (int)$spID;
+    $clientID = (int)$clientID;
+
+    $task = GLOBAL_SP_DB .'.spCaseTasks';
+    $taskStatus = GLOBAL_SP_DB .'.spCaseTasksStatus';
+    $taskNames = GLOBAL_SP_DB .'.spLists';
+    $users = GLOBAL_DB .'.users';
+    $sql = "SELECT t.taskID, t.userID, t.taskStatusID, ts.statusName,\n"
+        . "tn.itemName AS taskName, tn.sequence, \n"
+        . "CONCAT(u.lastName, ', ', u.firstName) AS userName \n"
+        . "FROM $task AS t\n"
+        . "LEFT JOIN $taskStatus AS ts ON (t.taskStatusID = ts.taskStatusID)\n"
+        . "LEFT JOIN $taskNames AS tn ON (t.taskListID = tn.listID)\n"
+        . "LEFT JOIN $users AS u ON (t.userID = u.id)\n"
+        . "WHERE (t.spID = '$spID' AND t.clientID = '$clientID' AND t.caseID = '$caseID'\n"
+        . "AND t.taskStatusID > 1)\n"
+        . "ORDER BY t.taskStatusID ASC, tn.sequence ASC, u.lastName ASC";
+
+    return $dbCls->fetchObjectRows($sql);
+
+} // end loc_getCaseTasks();

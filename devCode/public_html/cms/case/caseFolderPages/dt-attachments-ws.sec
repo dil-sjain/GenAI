@@ -1,0 +1,373 @@
+<?php
+/**
+ * AJAX handler for case attachments. Also provide data for PDF
+ */
+
+if (defined('IN_SPL_PDF')) {
+    // prevent direct access
+    if (realpath($_SERVER['SCRIPT_FILENAME']) == __FILE__) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            return;
+        }
+        else {
+            exit;
+        }
+    }
+    $isVendor = true;
+
+} else {
+    include_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+    $session->cms_logged_in(true, -1);
+    include_once __DIR__ . '/../../includes/php/'.'class_access.php';
+    $accCls = UserAccess::getInstance();
+    if (!$accCls->allow('accCaseAttach')) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            echo 'Access denied.';
+            return;
+        }
+        else {
+            exit('Access denied.');
+        }
+    }
+    include_once __DIR__ . '/../../includes/php/'.'class_db.php';
+
+    // Really clear these _SESSION vars if they are set to NULL
+    // isset() returns false if value is set to NULL
+    $nulled = ['ddqID', 'clientID', 'caseID'];
+    foreach ($nulled as $v) {
+        if (isset($_SESSION[$v]) && $_SESSION[$v] === null) {
+            unset($_SESSION[$v]);
+        }
+    }
+    $splPDF = false;
+    if (!isset($toPDF)) {
+        $toPDF = false;
+    }
+
+    $clientID = $_SESSION['clientID'];
+    $caseID = $_SESSION['currentCaseID'];
+
+    $isVendor = ($session->secure_value('userClass') == 'vendor');
+}
+require_once __DIR__ . '/../../includes/php/'.'funcs_misc.php';
+$globaldb = GLOBAL_DB;
+$global_sp_db = GLOBAL_SP_DB;
+require_once __DIR__ . '/../../includes/php/'.'funcs_clientfiles.php';
+
+//devDebug($_GET, '_GET');
+//$dbCls->dieOnQueryError = false;
+
+$iCompleted = COMPLETED_BY_INVESTIGATOR;
+$whereStage = '';
+$where2Stage = '';
+if ($isVendor) {
+    $whereStage = " AND (caseStage < '$iCompleted' || caseStage = " . AI_REPORT_GENERATED . ")";
+    $where2Stage = " AND (a.caseStage < '$iCompleted' || a.caseStage = " . AI_REPORT_GENERATED . ")";
+}
+
+$defOrderBy = 'fdesc';
+$allowOrderBy = ['fdesc', 'fname', 'fcat', 'fsrc', 'fdate', 'owner'];
+if (isset($_GET['ord'])) {
+    $orderBy = $_GET['ord'];
+} else {
+    $orderBy = '';
+}
+
+if (!in_array($orderBy, $allowOrderBy)) {
+    $orderBy = $defOrderBy;
+}
+
+// Get row counts
+$c_cnt = $dbCls->fetchValue("SELECT COUNT(*) AS cnt FROM subInfoAttach "
+    . "WHERE caseID='$caseID'{$whereStage}"
+);
+$i_cnt = $dbCls->fetchValue("SELECT COUNT(*) AS cnt FROM iAttachments "
+    . "WHERE caseID='$caseID'"
+);
+$d_cnt = $ddqID = 0;
+if ($ddqID = $dbCls->fetchValue("SELECT id FROM ddq WHERE caseID='$caseID' "
+    . "AND clientID='$clientID' LIMIT 1"
+)) {
+    $d_cnt = $dbCls->fetchValue("SELECT COUNT(*) AS cnt FROM ddqAttach "
+        . "WHERE ddqID='$ddqID' AND clientID='$clientID'"
+    );
+}
+
+$cnt = $c_cnt + $i_cnt + $d_cnt;
+
+if (!$toPDF) {
+
+    $minPP = 15;
+    $maxPP = 100;
+    $si = intval($_GET['si']);
+    $pp = intval($_GET['pp']);
+    if (! in_array($pp, [15, 20, 30, 50, 75, 100])) {
+        $pp = $minPP;
+    }
+    $sortDir = ($_GET['dir'] == 'yui-dt-desc') ? 'yui-dt-desc' : 'yui-dt-asc';
+
+    // Calculate page (base 1), and validate startIndex (base 0)
+    if (!$cnt) {
+        $pg = 1;
+        $si = 0;
+    } else {
+        if ($si >= $cnt) {
+            $si = $cnt - 1;
+        }
+
+        $t = $si + 1;
+        $t -= ($si % $pp);
+        $si = $t - 1;
+        $pg = ($si / $pp) + 1;
+    }
+    if ($si < 0) {
+        $si = 0;
+    }
+} // !$toPDF
+
+if (!isset($sortDir)) {
+    $sortDir = '';
+}
+$sortDir = strtoupper((($sortDir == 'yui-dt-asc') ? 'ASC': 'DESC'));
+
+// Construct JSON output
+$jsData = "{\"Response\":{\n"
+        . " \"Records\":[";
+
+$attachData = '[]';
+
+if ($cnt) {
+    // Create temp table to hold rows from all 3 soruces
+    $sql = "CREATE TEMPORARY TABLE tmpAtt ("
+         . "dbid int NOT NULL default '0', "
+         . "fdesc varchar(255) NOT NULL default '', "
+         . "fname varchar(255) NOT NULL default '', "
+         . "fcat varchar(255) NOT NULL default '', "
+         . "fsize int NOT NULL default '0', "
+         . "ftype varchar(50) NOT NULL default '0', "
+         . "fdate date default NULL, "
+         . "owner varchar(255) NOT NULL default '', "
+         . "fsrc varchar(30) NOT NULL default '', "
+         . "candel tinyint NOT NULL default '0', "
+         . "canedit tinyint NOT NULL default '0') ";
+    $dbCls->query($sql);
+
+
+    $cases = $dbCls->fetchObjectRow("SELECT caseStage, caseSource FROM cases "
+        . "WHERE id='$caseID' AND clientID='$clientID' LIMIT 1"
+    );
+    $caseStage = $cases->caseStage;
+    $caseSource = $cases->caseSource;
+
+    // Get any subinfoAttach rows
+    if ($c_cnt) {
+        if ($splPDF) {
+            $candel = $canedit = false;
+        } else {
+            $candel = $canedit = intval($accCls->allow('addCaseAttach') && !$isVendor);
+        }
+        // Fields to fetch
+        $flds = "a.id AS dbid, "
+              . "a.description AS fdesc, "
+              . "a.filename AS fname, "
+              . "c.name AS fcat, "
+              . "a.fileSize AS fsize, "
+              . "a.fileType AS ftype, "
+              . "LEFT(a.creationStamp, 10) AS fdate, "
+              . "u.firstName AS fNameowner, "
+              . "u.lastName AS lNameowner";
+        $data = $dbCls->fetchObjectRows("SELECT $flds, a.undeletable "
+            . "FROM subInfoAttach AS a "
+            . "LEFT JOIN $globaldb.users AS u ON u.userid = a.ownerID "
+            . "LEFT JOIN docCategory AS c ON c.id = a.catID "
+            . "WHERE a.caseID='$caseID'{$where2Stage}"
+        );
+
+        $values = [];
+        foreach ($data as $key => $attachment) {
+            $autoCaseCreated = ($caseSource == DUE_DILIGENCE_CS_AI_DD && $attachment->undeletable == 1);
+
+            $candel = $autoCaseCreated ? false : intval($accCls->allow('addCaseAttach') && !$isVendor);
+            $source = $autoCaseCreated ? '3P Monitor' : 'Client';
+
+            $values[] = "($attachment->dbid, '$attachment->fdesc', '$attachment->fname', '$attachment->fcat', $attachment->fsize, '$attachment->ftype', '$attachment->fdate', '$attachment->fNameowner $attachment->lNameowner', '$source', ".(($candel) ? '1': '0').", ".(($canedit) ? '1': '0').")";
+        }
+
+        if (!empty($values)) {
+            $query = "INSERT INTO tmpAtt (`dbid`, fdesc, fname, fcat, fsize, ftype, fdate, `owner`, fsrc, candel, canedit) VALUES " . implode(", ", $values);
+            $dbCls->query($query);
+        }
+    }
+
+    // Get any iAttachments rows
+    if ($i_cnt) {
+        $vid = $dbCls->fetchValue("SELECT caseAssignedAgent FROM cases WHERE id = '$caseID' AND clientID = '$clientID'");
+        // Allow deletion if stage < completed by investigator
+        //   or within 24 hours if stage is completed by investigator
+        if ($splPDF) {
+            $qualifiedPerson = 0;
+        } else {
+            $qualifiedPerson = intval($accCls->allow('addCaseAttach')
+                && $isVendor
+                && $_SESSION['userType'] != VENDOR_USER
+            );
+        }
+        $stageAllows = intval($caseStage < COMPLETED_BY_INVESTIGATOR);
+        $iCompleted = intval($caseStage == COMPLETED_BY_INVESTIGATOR);
+        $cutoff = time() - 86400; // 24 hours prior
+
+        // Fields to fetch
+        $flds = "a.id AS dbid, "
+              . "a.description AS fdesc, "
+              . "a.filename AS fname, "
+              . "IF(a.sp_catID, IF(LENGTH(cEx.altName), cEx.altName, IF(LENGTH(c.name), c.name, '')) ,'') AS fcat, "
+              . "a.fileSize AS fsize, "
+              . "a.fileType AS ftype, "
+              . "LEFT(a.creationStamp, 10) AS fdate, "
+              . "u.lastName AS owner";
+        $dbCls->query("INSERT INTO tmpAtt SELECT $flds, 'Investigator' AS src, "
+            . "IF($qualifiedPerson AND ($stageAllows OR ($iCompleted AND "
+            . "(UNIX_TIMESTAMP(creationStamp) > $cutoff))), 1, 0) AS candel, "
+            . "IF($qualifiedPerson AND ($stageAllows OR ($iCompleted AND "
+            . "(UNIX_TIMESTAMP(creationStamp) > $cutoff))), 1, 0) AS canedit "
+            . "FROM iAttachments AS a "
+            . "LEFT JOIN $globaldb.users AS u ON u.userid = a.ownerID "
+            . "LEFT JOIN $global_sp_db.spDocCategory AS c ON c.id = a.sp_catID "
+            . "LEFT JOIN $global_sp_db.spDocCategoryEx AS cEx ON cEx.docCatID = a.sp_catID AND cEx.clientID = $clientID AND cEx.spID = '$vid' "
+            . "WHERE a.caseID='$caseID'"
+        );
+        //devDebug($dbCls->last_sql(), 'iAttachments sql');
+    }
+
+    // Get any ddqAttach rows
+    if ($d_cnt) {
+        if ($splPDF || $isVendor || $_SESSION['userType'] == VENDOR_USER) {
+            $candel = $canedit = false;
+        } else {
+            $candel = false;
+            $canedit = $canedit = intval($accCls->allow('addCaseAttach') && !$isVendor
+                && $_SESSION['userType'] != VENDOR_USER);
+        }
+        // Fields to fetch
+        $flds = "a.id AS dbid, "
+              . "a.description AS fdesc, "
+              . "a.filename AS fname, "
+              . "IFNULL(c.name, 'Intake Form'), "
+              . "a.fileSize AS fsize, "
+              . "a.fileType AS ftype, "
+              . "LEFT(a.creationStamp, 10) AS fdate, "
+              . "u.subByName AS owner";
+            $dbCls->query("INSERT INTO tmpAtt SELECT $flds, 'DDQ' AS src, "
+                . (($candel) ? '1': '0') . " AS candel, "
+                . (($canedit) ? '1': '0') . " AS canedit "
+                . "FROM ddqAttach AS a "
+                . "LEFT JOIN ddq AS u ON u.id = a.ddqID "
+                . "LEFT JOIN cases AS ca ON ca.id = u.caseID "
+                . "LEFT JOIN docCategory AS c ON c.id = a.catID "
+                . "WHERE a.ddqID={$ddqID} AND a.clientID={$clientID}"  );
+    }
+
+    if (!$toPDF) {
+        $orderLimit = "ORDER BY $orderBy $sortDir LIMIT $si, $pp";
+    } else {
+        $orderLimit = 'ORDER BY fdesc ASC';
+    }
+
+    $rows = $dbCls->fetchObjectRows("SELECT * FROM tmpAtt WHERE 1 $orderLimit");
+
+    if (is_array($rows) && count($rows)) {
+        $limit = count($rows);
+        if (!$toPDF) {
+            for ($i = 0; $i < $limit; $i++) {
+                // escape as needed
+                $rows[$i]->fdesc = quoteJSONdata($rows[$i]->fdesc);
+                $rows[$i]->ftype = getFileTypeDescriptionByFileName($rows[$i]->fname);
+                $rows[$i]->fname = quoteJSONdata($rows[$i]->fname);
+                $rows[$i]->fcat = quoteJSONdata($rows[$i]->fcat);
+                $rows[$i]->fsize = quoteJSONdata($rows[$i]->fsize);
+                $rows[$i]->fdate = quoteJSONdata($rows[$i]->fdate);
+                $rows[$i]->owner = quoteJSONdata($rows[$i]->owner);
+                $rows[$i]->fsrc = quoteJSONdata($rows[$i]->fsrc);
+                $rows[$i]->canedit = quoteJSONdata($rows[$i]->canedit);
+                $rows[$i]->candel = quoteJSONdata($rows[$i]->candel);
+                $rows[$i]->del = '&nbsp;';
+            }
+            //devDebug($rows, '$rows');
+            $jsData .= substr(json_encodeLF($rows), 1, -1);
+        } else {
+            $attachData = '[';
+            for ($i = 0; $i < $limit; $i++) {
+                // escape as needed
+                $row = $rows[$i];
+                $row->fdesc = quoteJSONdata($row->fdesc);
+                $row->ftype = getFileTypeDescriptionByFileName($row->fname);
+                $row->fname = quoteJSONdata($row->fname);
+                $row->fcat = quoteJSONdata($row->fcat);
+                $row->fsize = quoteJSONdata($row->fsize);
+                $row->fdate = quoteJSONdata($row->fdate);
+                $row->owner = quoteJSONdata($row->owner);
+                $row->fsrc = quoteJSONdata($row->fsrc);
+                $fmt = 'fdesc: "' . $row->fdesc . '", '
+                     . 'fname: "' . $row->fname . '", '
+                     . 'fcat: "' . $row->fcat . '", '
+                     . 'fsize: "' . $row->fsize . '", '
+                     . 'ftype: "' . $row->ftype . '", '
+                     . 'fdate: "' . $row->fdate . '", '
+                     . 'owner: "' . $row->owner . '", '
+                     . 'fsrc: "'  . $row->fsrc . '"';
+                $attachData .= (($i) ? ",\n  {" : '{') . $fmt . '}';
+            }
+            $attachData .= ']';
+            //devDebug($attachData, 'attach data');
+        }
+    }
+} // if $cnt
+
+
+$jsData .= "],\n";
+if (!$splPDF) {
+    $dbCls->close();
+}
+
+if (!$cnt) {
+    $cnt = '0';
+}
+
+if (!$toPDF) {
+
+    $jsData .= " \"Total\":$cnt,\n"
+            .  " \"RowsPerPage\":$pp,\n"
+            .  " \"Page\":$pg,\n"
+            .  " \"RecordOffset\":$si\n}\n}";
+
+    // Override normal headers to values more favorable to a JSON return value
+    header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+    header("Last-Modified: " . gmdate("D, d M Y H:i:s") . "GMT");
+    header("Cache-Control: no-cache, must-revalidate");
+    header("Pragma: no-cache");
+    header("Content-Type: text/plain; charset=utf-8"); //JSON
+
+    //devDebug($jsData);
+
+    echo $jsData;
+
+} else {
+
+    echo <<<EOT
+
+<script type="text/javascript">
+YAHOO.namespace('cfData');
+
+YAHOO.cfData.attachData = $attachData;
+
+</script>
+
+EOT;
+
+}
+
+?>

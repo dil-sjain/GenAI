@@ -1,0 +1,760 @@
+<?php
+/**
+ * Multi-Assign Cases.
+ */
+
+require_once __DIR__ . '/../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+$caseAssignAuth = PageAuth::genToken('caseAssignAuth');
+require_once __DIR__ . '/../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if ($_SESSION['userType'] != VENDOR_ADMIN) {
+    exit('Access denied.');
+}
+
+if (!isset($_SESSION['multiAssignCase'])) {
+    session_write_close();
+    header("Location: casehome.sec");
+    exit;
+}
+
+require_once __DIR__ . '/../includes/php/'.'funcs_users.php';
+require_once __DIR__ . '/../includes/php/'.'funcs_misc.php';
+require_once __DIR__ . '/../includes/php/'.'caselist_inc.php';
+require_once __DIR__ . '/../includes/php/'.'class_search.php';
+
+
+$session->un_set('IN_TP_HOME');
+$session->set('IN_CASE_HOME', true);
+$b3pAccess = (isset($_SESSION['b3pAccess']) && $_SESSION['b3pAccess']);
+
+
+$pageTitle = "Case Management";
+$customPageTitle = "Multi-Assign Cases";
+$ttlRec = $_SESSION['multiAssignCase']['records'];
+
+$insertInHead = <<<EOT
+
+<script type="text/javascript">
+YAHOO.namespace('caseAssign');
+caseAssign = YAHOO.caseAssign; // external reference
+caseAssign.opActive = false;
+caseAssign.auth = '$caseAssignAuth';
+caseAssign.numCk = 0;
+caseAssign.tcr = $ttlRec;
+caseAssign.tcrTotal = $ttlRec;
+</script>
+
+<style type="text/css" media="screen">
+    table.gray-sp tbody:hover tr:hover { background-color:#ddddff; cursor:pointer; }
+    table.gray-sp tbody:hover tr:hover td.blank { background-color:#fff; cursor:pointer; }
+    table.gray-sp th {
+        background-color:#efefef; border-top: 1px solid #7f7f7f; border-bottom: 1px solid #7f7f7f;
+        border-left: 1px solid #cfcfcf;
+    }
+    table.gray-sp td { border-left: 1px solid #cfcfcf;}
+    table.gray-sp .firstCell { border-left: 1px solid #7f7f7f; }
+    table.gray-sp .lastCell { border-right: 1px solid #7f7f7f; }
+    table.gray-sp tr.lastRow td { border-bottom: 1px solid #7f7f7f; }
+    table.gray-sp td.blank, table.gray-sp tr.blank { border: none; }
+    table.gray-sp td.blank button:hover, table.gray-sp td.blank select:hover { cursor:pointer; }
+</style>
+
+EOT;
+
+
+
+$loadYUImodules = ['cmsutil', 'json'];
+shell_head(true);
+?>
+
+<h3>Multi-Assign Case Tool</h3>
+<div id="divProgress" style="display:none;">
+<?php
+    require_once __DIR__ . '/../includes/php/'.'class_progressbar.php';
+    $pbar = new ProgressBar('pbar1');
+    $pbar->output();
+?>
+
+    <div id="so-far" class="marg-top1e"></div>
+</div>
+<div id="divWait" class="marg-top1e" style="display:none;"></div>
+
+<div class="marg-top1e" id="divResults">
+<p><em>Showing <span id="ttlResults"><?php echo $ttlRec .' of '
+    . $ttlRec; ?></span> filtered results.</em></p>
+<br />
+<?php
+
+$box = maLoc_createUserDDL();
+$box2 = str_replace('id="invID"', 'id="invID2"', (string) $box);
+
+$trTop = '<tr><td class="blank" style="white-space:nowrap;" colspan="3">'
+    .'<strong>Investigator to be assigned:</strong></td>'
+    .'<td colspan="2" class="blank">'. $box .'</td>'
+    . '<td colspan="2" class="blank" style="text-align:right;"><button id="btnTop" '
+    .'onclick="caseAssign.confirmUpdateStage(\'acc\'); return false;" class="btn">'
+    .'Accepted by<br />Investigator</button></td>'
+    .'<td colspan="3" class="blank" style="text-align:left;"><button id="btnTop" '
+    .'onclick="caseAssign.confirmSubmit(\'goInv\'); return false;" style="width:100%" class="btn">'
+    .'Assign Investigator<br />to Selected Cases</button>'
+    .'</td></tr>';
+
+$trBot = '<tr><td class="blank" style="white-space:nowrap;" colspan="3">'
+    .'<strong>Investigator to be assigned:</strong></td>'
+    .'<td colspan="2" class="blank">'. $box2 .'</td>'
+    . '<td colspan="2" class="blank" style="text-align:right;"><button id="btnTop" '
+    .'onclick="caseAssign.confirmUpdateStage(\'acc\'); return false;" class="btn">'
+    .'Accepted by<br />Investigator</button></td>'
+    .'<td colspan="3" class="blank" style="text-align:left;"><button id="btnTop" '
+    .'onclick="caseAssign.confirmSubmit(\'goInv\'); return false;" style="width:100%" class="btn">'
+    .'Assign Investigator<br />to Selected Cases</button>'
+    .'</td></tr>';
+?>
+<a href="javascript:void(0);" onclick="caseAssign.checkBulk('set');">Check All</a> /
+<a href="javascript:void(0);" onclick="caseAssign.checkBulk('none');">Check None</a> /
+<a href="javascript:void(0);" onclick="caseAssign.checkBulk('rev');">Invert All</a>
+<br />
+<table cellpadding="4" border="0" cellspacing="0" width="100%" class="gray-sp">
+    <?php echo $trTop; ?>
+
+    <tr>
+        <th class="firstCell">&nbsp;</th>
+        <th>Case&nbsp;#</th>
+        <th>Client</th>
+        <th>Case&nbsp;Name</th>
+        <th>Type</th>
+        <th>Stage</th>
+        <th>Investigator</th>
+        <th>Assigned&nbsp;Date</th>
+        <th>Due Date</th>
+        <th class="lastCell">&nbsp;</th>
+    </tr>
+<?php
+
+$inValues = maLoc_setupSearch();
+$rows = maLoc_processSearch($inValues);
+if (!$rows) {
+    echo '
+    <tr class="even">
+        <td colspan="10">No results based on current case list filters.</td>
+    </tr>';
+} else {
+    $x = 0;
+    $numRows = (count($rows)-1);
+    $class = 'even';
+    foreach ($rows as $r) {
+        $cbValue = $r->dbid2 .':'. $r->dbid .':'
+            . htmlspecialchars((string) $r->assigned, ENT_QUOTES, 'UTF-8');
+
+        echo '
+    <tr id="cr'. $x .'" class="'. $class .'" onclick="caseAssign.rowCheck(\'cb'. $x .'\');">
+        <td class="firstCell"><input type="checkbox" id="cb'. $x .'" value="'. $cbValue .'" '
+            .'onclick="caseAssign.rowCheck(this);" /></td>
+        <td>'. $r->casenum .'</td>
+        <td>'. $r->clientname .'</td>
+        <td>'. $r->casename .'</td>
+        <td>'. $r->casetype .'</td>
+        <td>'. $r->stage .'</td>
+        <td>'. $r->investiagent .'</td>
+        <td>'. $r->assigned .'</td>
+        <td>'. $r->duedate .'</td>
+        <td class="lastCell">'. $r->iso2 .'</td>
+    </tr>';
+        $class = ($class == 'odd') ? 'even':'odd';
+        $x++;
+        if ($x == $numRows) {
+            $class = $class .' lastRow';
+        }
+    }
+}
+
+echo $trBot; // shows bottom row with second submit button.
+
+?>
+
+</table>
+</div>
+
+<script type="text/javascript">
+
+(function()
+{
+    var Dom   = YAHOO.util.Dom;
+    var Event = YAHOO.util.Event;
+    var Lang  = YAHOO.lang;
+    var Util  = YAHOO.cms.Util;
+    var jobID = 0;
+<?php
+$pbarCtrl = new ProgressBarControl($pbar, 'caseAssign');
+$pbarCtrl->output();
+?>
+
+    caseAssign.rowCheck = function(boxID)
+    {
+        var row = Dom.get(boxID);
+        if (row.checked == true) {
+            row.checked = false;
+        } else {
+            row.checked = true;
+        }
+    };
+
+    caseAssign.checkBulk = function(type)
+    {
+        <?php // not a reverse. check all or none. ?>
+        if (type != 'rev') {
+            var status = (type == 'set') ? true:false;
+            for (var i=0; i<caseAssign.tcrTotal; i++) {
+                var b = Dom.get('cb'+ i);
+                if (b === null) {
+                    continue;
+                }
+                b.checked= status;
+            }
+            caseAssign.numCk = (status == true) ? caseAssign.tcr:0;
+            return false;
+        }
+
+        <?php // reverse the status of all checkboxes. ?>
+        for (var i=0; i<caseAssign.tcrTotal; i++) {
+            var b = Dom.get('cb'+ i);
+            if (b === null) {
+                continue;
+            }
+            if (b.checked == true) {
+                b.checked = false;
+            } else {
+                b.checked = true;
+            }
+        }
+    };
+
+    caseAssign.getChecked = function() {
+        var checks = 0;
+        for (var i=0; i<caseAssign.tcrTotal; i++) {
+            var b = Dom.get('cb'+ i);
+            if (b === null) {
+                continue;
+            }
+            if (b.checked == true) {
+                checks++;
+            }
+        }
+        return checks;
+    };
+
+    caseAssign.mkSelect = function(selVal) {
+        var sl1 = Dom.get('invID');
+        var sl2 = Dom.get('invID2');
+
+        sl1.value = selVal;
+        sl2.value = selVal;
+    };
+
+    caseAssign.tripMonitor = function()
+    {
+        caseAssign.opRequest('monitor');
+    };
+
+    caseAssign.unhideRows = function(res)
+    {
+        caseAssign.numCk = 0;
+        for (var i=0; i<res.rtnIds.length; i++) {
+            Dom.get('cr'+ res.rtnIds[i]).style.display = '';
+            Dom.get('cb'+ res.rtnIds[i]).checked = true;
+            caseAssign.tcr++;
+        }
+        Dom.get('divResults').style.display = 'block';
+        Dom.get('ttlResults').innerHTML = caseAssign.tcr +' of '+ caseAssign.tcr +' remaining';
+    };
+
+    caseAssign.displayCases = function(res)
+    {
+        <?php // done with checked rows. take them away from the dom. ?>
+        for (var i=0; i<res.rtnIds.length; i++) {
+            var row = Dom.get('cr'+ res.rtnIds[i]);
+            row.parentNode.removeChild(row);
+        }
+        caseAssign.mkSelect('');
+        Dom.get('divProgress').style.display = 'none';
+        Dom.get('divWait').style.display = 'none';
+        Dom.get('divResults').style.display = 'block';
+    };
+
+    caseAssign.confirmSubmit = function(op)
+    {
+        <?php // check we have what we need to submit before showing confirm dialog ?>
+        var invID = Dom.get('invID').value;
+        caseAssign.numCk = caseAssign.getChecked();
+
+        <?php // nothing selected at all? ?>
+        if (caseAssign.numCk == 0 && invID == '') {
+            <?php // double check for checks. ?>
+            var tmpNumCk = caseAssign.getChecked();
+            if (tmpNumCk > 0) {
+                caseAssign.numCk = tmpNumCk;
+            } else {
+                alert('You must select an investigator AND at least one case to assign to them.');
+                return false;
+            }
+        }
+        <?php // no cases selected? ?>
+        if (caseAssign.numCk == 0) {
+            <?php // double (or triple) check for checked boxes ?>
+            if (caseAssign.getChecked() == 0) {
+                alert('Please select cases to assign');
+                return false;
+            }
+        }
+        <?php // no investigator selected? ?>
+        if (invID == '') {
+            alert('Please select an investigator');
+            return false;
+        }
+        var confPnl = caseAssign.confirmPanel;
+        if (!confPnl.rendered) {
+            confPnl.render(document.body);
+            confPnl.rendered = true;
+
+            caseAssign.confirmBtns = [
+                { text: "Yes", handler: function(){
+                    caseAssign.opRequest(op);
+                    confPnl.hide();
+                }},
+                { text:"No", handler: function()
+                    {
+                        confPnl.hide();
+                        return false;
+                    },
+                    isDefault:true
+                }
+            ];
+            confPnl.cfg.setProperty("buttons", caseAssign.confirmBtns);
+        }
+
+        var pmt = "Are you <i><u>certain</u></i> you want to assign these cases?";
+        confPnl.setHeader("Please Confirm Submission");
+        confPnl.setBody(pmt);
+        confPnl.show();
+    };
+
+    caseAssign.confirmPanel = new YAHOO.widget.SimpleDialog("confirm-dlg", {
+        width: "300px",
+        fixedcenter: "contained",
+        visible: false,
+        modal: true,
+        draggable: false,
+        close: false,
+        icon: YAHOO.widget.SimpleDialog.ICON_HELP,
+        constraintoviewport: false
+    });
+    caseAssign.confirmPanel.rendered = false;
+
+    caseAssign.confirmUpdateStage = function(op)
+    {
+        var invID = Dom.get('invID').value;
+
+        caseAssign.numCk = caseAssign.getChecked();
+
+        <?php // no cases selected? ?>
+        if (caseAssign.numCk == 0) {
+            <?php // double (or triple) check for checked boxes ?>
+            if (caseAssign.getChecked() == 0) {
+                alert('Please select cases to convert to Accepted by Investigator');
+                return false;
+            }
+        }
+
+        var confPnl = caseAssign.confirmPanel;
+        if (!confPnl.rendered) {
+            confPnl.render(document.body);
+            confPnl.rendered = true;
+
+            caseAssign.confirmBtns = [
+                { text: "Yes", handler: function(){
+                    caseAssign.opRequest(op);
+                    confPnl.hide();
+                }},
+                { text:"No", handler: function()
+                {
+                    confPnl.hide();
+                    return false;
+                },
+                    isDefault:true
+                }
+            ];
+            confPnl.cfg.setProperty("buttons", caseAssign.confirmBtns);
+        }
+
+        var pmt = "Are you <i><u>certain</u></i> you want to update these cases to accepted by investigator?";
+        confPnl.setHeader("Please Confirm Submission");
+        confPnl.setBody(pmt);
+        confPnl.show();
+    };
+
+    caseAssign.opRequest = function(op)
+    {
+        if (!caseAssign.opActive) {
+            return false;
+        }
+        var postData = "op=" + op
+            + '&caseAssignAuth=' + caseAssign.auth;
+        switch (op) {
+        case 'goInv':
+            caseAssign.numCk = caseAssign.getChecked();
+            postData += '&invID='+ Dom.get('invID').value +'&ttlCk='+ caseAssign.numCk;
+            var x = 0;
+            var cids = '';
+            for (var i=0;i<caseAssign.tcrTotal;i++) {
+                var b = Dom.get('cb'+ i);
+                if (b === null) {
+                    continue;
+                }
+                if (b.value != '' && b.checked == true) {
+                    postData += '&ck'+ x +'='+ b.value;
+                    x++;
+                    <?php // hide checked row from view so we can use this table again. ?>
+                    Dom.get('cr'+ i).style.display = 'none';
+                    <?php // in case of a boo boo, pass checked row id's so we can unhide if needed. ?>
+                    cids += (cids == '') ? i: ','+ i;
+                }
+            }
+            postData += '&ckids='+ cids;
+
+            <?php // now hide the table, so we can show the progress bar instead. ?>
+            Dom.get('divResults').style.display = 'none';
+
+            <?php // reset values to reflect current state. ?>
+            caseAssign.tcr = (caseAssign.tcr - x);
+            caseAssign.numCk = 0;
+
+            <?php // update our "showing x of x" text at the top of the table. ?>
+            var ttlTxt = Dom.get('ttlResults');
+            ttlTxt.innerHTML = caseAssign.tcr +' of '+ caseAssign.tcr +' remaining';
+            break;
+        case 'monitor':
+            postData += '&jid='+ jobID;
+            break;
+        case 'acc':
+            caseAssign.numCk = caseAssign.getChecked();
+            postData += '&ttlCk='+ caseAssign.numCk;
+            var x = 0;
+            var cids = '';
+            for (var i=0;i<caseAssign.tcrTotal;i++) {
+                var b = Dom.get('cb'+ i);
+                if (b === null) {
+                    continue;
+                }
+                if (b.value != '' && b.checked == true) {
+                    postData += '&ck'+ x +'='+ b.value;
+                    x++;
+                    <?php
+                    // hide checked row from view so we can use this table again.
+                    // in case of a boo boo, pass checked row id's so we can unhide if needed.
+                    ?>
+                    cids += (cids == '') ? i: ','+ i;
+                }
+            }
+            postData += '&ckids='+ cids;
+            break;
+        default:
+            alert('operation not configured');
+            return false;
+        }
+
+        var handleOperation = function(o) {
+            var res = false;
+            var op = o.argument[0];
+            try {
+                res = Lang.JSON.parse(o.responseText);
+            } catch (ex) {
+    <?php
+if (SECURIMATE_ENV != 'Production') {
+    ?>
+                alert(o.responseText);
+    <?php
+} else {
+    ?>
+                alert('An error occurred while communicating with the server');
+    <?php
+}
+    ?>
+                return;
+            }
+            caseAssign.auth = res.caseAssignAuth;
+            if (res.PageAuthResult != 1) {
+                if (res.rtnIds != undefined) {
+                    caseAssign.unhideRows(res);
+                }
+                caseAssign.showResult('Operation Failed', 'Invalid page autorization');
+                return false;
+            }
+            if (res.errMsg != undefined) {
+                if (res.rtnIds != undefined) {
+                    caseAssign.unhideRows(res);
+                }
+                caseAssign.showResult(res.errTitle, res.errMsg);
+                return false;
+            }
+
+            <?php
+            // checks for handling a different op on return.
+            // ex: job is completed, so we want to show the table again.
+            ?>
+            if (res.ReturnOp != undefined) {
+                op = res.ReturnOp;
+            }
+            switch (op) {
+            case 'goInv':
+                break;
+            case 'monitor':
+                jobID = res.jobID;
+                Dom.get('divWait').innerHTML = 'Processing all records...';
+                if (res.Complete == 1) {
+                    Dom.get('so-far').innerHTML = '<i>Completed all ' + res.AllFmt + '</i>';
+                    caseAssign.setPbar(res.Percent);
+                    Dom.get('divProgress').style.display = 'block';
+                    Dom.get('divWait').style.display = 'block';
+                    window.setTimeout(function(o){
+                        caseAssign.displayCases(res);
+                    }, 1500);
+                } else {
+                    Dom.get('so-far').innerHTML = '<i>' + res.DoneFmt + ' of '
+                        + res.AllFmt + '</i>';
+                    caseAssign.setPbar(res.Percent);
+                    Dom.get('divProgress').style.display = 'block';
+                    Dom.get('divWait').style.display = 'block';
+                    window.setTimeout(caseAssign.tripMonitor, 1500);
+                }
+                break;
+                case 'acc':
+                    window.location.reload();
+                    break;
+            }
+        };
+
+        var sUrl = '<?php echo $sitepath; ?>case/multi-assign-ws.sec';
+        var callback = {
+            success: handleOperation,
+            failure: function(o){
+    <?php
+if ($_SESSION['userType'] > VENDOR_ADMIN) {
+    ?>
+                alert("Failed connecting to " + sUrl);
+    <?php
+} else {
+    ?>
+                var a = 1; <?php // do nothing ?>
+<?php
+}
+    ?>
+            },
+            argument: [op],
+            cache: false
+        };
+        var request = YAHOO.util.Connect.asyncRequest('POST', sUrl, callback, postData);
+
+        return false; <?php // cancel href action ?>
+    };
+
+<?php
+
+require_once __DIR__ . '/../includes/php/'.'class_msgpanel.php';
+echo MsgPanel::simpleResultPanel('caseAssign');
+
+?>
+
+    caseAssign.opActive = true; <?php //enable links ?>
+
+})();
+
+</script>
+
+<?php
+shell_foot(true);
+
+
+/********************
+*  Local Functions  *
+********************/
+
+/**
+ * Sets up the search variables for the search class, from the session.
+ *
+ * @return array Values to be passed into the search class
+ */
+function maLoc_setupSearch()
+{
+    $params = $_SESSION['stickyCL'];
+    $gsrchSrc = 'CL';
+    if (array_key_exists('caseFilterSrc', $_SESSION)) {
+        $gsrchSrc = $_SESSION['caseFilterSrc'];
+    }
+    if ($gsrchSrc == 'AF' || $gsrchSrc == 'SB') {
+        if ($gsrchSrc == 'AF') {
+            $fld = $_SESSION['gsrch'][$gsrchSrc]['cs']['flds'][0];
+            $srch = $_SESSION['gsrch'][$gsrchSrc]['cs']['srch'][0];
+        } else {
+            $fld = $_SESSION['gsrch'][$gsrchSrc]['cs']['fld'];
+            $srch = $_SESSION['gsrch'][$gsrchSrc]['cs']['srch'];
+        }
+        $gsrch = $_SESSION['gsrch'][$gsrchSrc]['cs'];
+        $gsrch['mode'] = 'cs';
+    } else {
+        $fld = $_SESSION['gsrch'][$gsrchSrc]['fld'];
+        $srch = $_SESSION['gsrch'][$gsrchSrc]['srch'];
+        $gsrch = $_SESSION['gsrch'][$gsrchSrc];
+    }
+
+    $stg  = $params['lb_stage'];
+    $stat = $params['lb_status'];
+    $dts  = 'all_dates';
+    $rgn = '';
+    $cname = trim((string) $params['cname']);
+    $iname = trim((string) $params['iname']);
+    $orderBy = $params['ord'];
+    $yuiSortDir = ($params['dir'] == 'yui-dt-desc') ? 'yui-dt-desc' : 'yui-dt-asc';
+    $sortDir = ($yuiSortDir == 'yui-dt-asc') ? 'ASC': 'DESC';
+
+    // gather input values for search
+    $inValues = ['src'   => $gsrchSrc, 'fld'   => $fld, 'srch'  => $srch, 'stat'  => $stat, 'stg'   => $stg, 'si'    => 0, 'sort'  => $orderBy, 'dir'   => $sortDir, 'rpp'   => 100];
+
+    $inValues['iname'] = $iname;
+    $inValues['cli'] = $cname;
+
+    if ($gsrchSrc == 'AF') {
+        $showing = $gsrch['showing'];
+        if ($showing == 1) {
+            $inValues['srch'] = $gsrch['srch'][0];
+            $inValues['fld'] = $gsrch['flds'][0];
+        } else {
+            $inValues['srch'] = [];
+            $inValues['fld'] = [];
+            for ($i = 0; $i < $showing; $i++) {
+                $inValues['srch'][] = $gsrch['srch'][$i];
+                $inValues['fld'][] = $gsrch['flds'][$i];
+            }
+        }
+        $inValues['matchCase'] = $gsrch['matchIncl'];
+        if ($gsrch['dateIncl']) {
+            if ($gsrch['date1'] != '0000-00-00') {
+                $inValues['date1'] = $gsrch['date1'];
+            }
+            if ($gsrch['date2'] != '0000-00-00') {
+                $inValues['date2'] = $gsrch['date2'];
+            }
+        }
+        if ($gsrch['meIncl']) {
+            switch ($gsrch['me']) {
+            case 'requestor':
+                $inValues['me'] = $_SESSION['userid'];
+                $inValues['meCol'] = $gsrch['me'];
+                break;
+            case 'caseInvestigatorUserID':
+            case 'acceptingInvestigatorID':
+            case 'assigningProjectMgrID':
+                $inValues['me'] = $_SESSION['id'];
+                $inValues['meCol'] = $gsrch['me'];
+                break;
+            }
+        }
+    }
+    //devDebug($inValues, 'inValues');
+
+    return $inValues;
+} // end maLoc_setupSearch();
+
+
+/**
+ * Runs the search class to get results based on params from caselist.
+ *
+ * @param array $inValues Values to be passed into the search class (from setup search);
+ *
+ * @return array Search results (all results from search, no paging.)
+ */
+function maLoc_processSearch($inValues)
+{
+    try {
+        if (!$inValues) {
+            return false;
+        } else {
+            $dbCls = dbClass::getInstance();
+            // Scope not always set, Adding isset check,
+            // which fixes "Warning: Illegal string offset" error.
+            $gsrchScope = (isset($_SESSION['caseFilterSrc']) && isset($_SESSION['caseFilterSrc']['scope']))
+                ? $_SESSION['caseFilterSrc']['scope']
+                : '';
+
+            $GS = new SpSearchCases($gsrchScope);
+
+            //devDebug($GS->sess, 'filtered session vars');
+            $GS->parseInput($inValues, true);
+
+            // extract order by from search sql for use in second query.
+            $ss = $GS->searchSql;
+            $ss = explode("ORDER BY ", (string) $ss);
+            $ss = $ss[1];
+            $ss = explode("LIMIT ", $ss);
+            $ss = trim("ORDER BY ". $ss[0]);
+
+            $records = $GS->countRows();
+            $pages = $GS->pages;
+            $rpp = $GS->recordsPerPage;
+            $startPage = $GS->startPage;
+            $startOffset = $GS->startOffset;
+        }
+        if ($records) {
+            $start = $GS->getRecords(true);
+            $sql = "SELECT * FROM ". GLOBAL_DB . ".tmpCL $ss LIMIT 100,$records";
+            $finish = $dbCls->fetchObjectRows($sql);
+            $rows = array_merge($start, $finish);
+        }
+
+    } catch (SearchException $ex) {
+        devDebug($ex->getMessage(), 'SearchException message');
+        $records = 0;
+        $startOffset = 0;
+        $startPage = 1;
+    }
+
+    return $rows ?? false;
+
+} // end maLoc_processSearch();
+
+
+/**
+ * Create an array of users in select list format.
+ *
+ * @return html Returns html of generated select list.
+ */
+function maLoc_createUserDDL()
+{
+    $dbCls = dbClass::getInstance();
+    // Get User Names and IDs
+    $sql = "SELECT id, lastName, firstName FROM ". GLOBAL_DB .".users "
+        ."WHERE vendorID = ".intval($_SESSION['vendorID']) ." "
+            ."AND (status = 'active' OR status = 'pending') "
+        ."ORDER BY lastName";
+
+    $userList = $dbCls->fetchObjectRows($sql);
+
+    // Check for error
+    if (!$userList) {
+        return false;
+    }
+
+    $html = '<select id="invID" name="invID" onchange="caseAssign.mkSelect(this.value);">';
+    $html .= '<option value="">Please select a user</option>';
+
+    // Loop through, inserting options into drop down
+    foreach ($userList as $user) {
+        $displayName = $user->lastName .', '. $user->firstName;
+        $html .= '<option value="'. $user->id .'">'. $displayName .'</option>';
+    } // end foreach
+
+    // close select list
+    $html .= '</select>';
+
+    return $html;
+} // end function fCreateUserDDL

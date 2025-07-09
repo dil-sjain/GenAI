@@ -1,0 +1,2404 @@
+<?php
+/**
+ * SP GDC Review interface
+ */
+
+require_once __DIR__ . '/../includes/php/cms_defs.php';
+$session->cms_logged_in(true, -1);
+$gdcReviewAuth = PageAuth::genToken('gdcReviewAuth');
+require_once __DIR__ . '/../includes/php/class_access.php';
+$accCls = UserAccess::getInstance();
+
+if (!$session->value('IN_CASE_HOME')
+    || $session->secure_value('userClass') != 'vendor'
+    || !isset($_SESSION['currentCaseID'])
+    || !($caseID = $_SESSION['currentCaseID'])
+    || !$accCls->allow('accCaseMng')
+) {
+    return;
+}
+require_once __DIR__ . '/../includes/php/Models/Globals/Features/TenantFeatures.php';
+require_once __DIR__ . '/../includes/php/class_gdccase.php';
+$loadScreening = '';
+
+if (isset($_GET['ls'])) {
+    // load specific screening, rather than current
+    $loadScreening = '?scrID=' . intval($_GET['ls']);
+}
+$e_clientID = $clientID = $_SESSION['clientID'];
+$gdc = new Gdc($clientID);
+$flags      = $gdc->flagImage;
+$imgMatch    = $flags['match'];
+$imgFalsePositive = $flags['falsePositive'];
+$imgUndetermined  = $flags['undetermined'];
+$caseInfoBtmMarg = 7;
+$e_caseID = intval($caseID);
+
+// Is Media Monitor enabled for the given case's tenant?
+$mmEnabled = (($tf = (new TenantFeatures($clientID))->tenantHasFeatures([Feature::TENANT_MEDIA_MONITOR], FEATURE::APP_TPM)) && !empty($tf[Feature::TENANT_MEDIA_MONITOR]));
+
+include_once __DIR__ . '/../includes/php/class_waitspin.php';
+$waitSpinJS = WaitSpin::headJs(16, ['waitspinCfgTabDiv', 'waitspinRefinementDiv']);
+
+$insertInHead =<<<EOT
+
+<style type="text/css">
+
+#ifrbody {
+  margin-bottom: 2px;
+}
+
+#subdemo .yui-content {
+  background-color: #fff;
+  border: none;
+  margin: .7em 0 0 0;
+  padding: 0;
+}
+
+.acld-title {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: .25em;
+}
+
+.acld-text {
+  font-weight: normal
+}
+
+.acld-label {
+  font-weight:bold;
+  text-decoration: italic;
+}
+
+#hit-list, #review-symbols {
+    margin-left: 20px;
+}
+
+#subject-list, #subject-list-nr {
+    width: 100%;
+}
+
+#gdc-review-log div.bd {
+    background-color: #ffffff;
+}
+
+
+#subject-list tr.hi {
+    background-color: #88cefa;
+}
+
+#hit-list table tr.clk {
+    cursor: pointer;
+}
+
+#hit-list table tr:hover.clk {
+    background-color: #abdfff;
+}
+
+#pgdiv0, #pgdiv1, #pgdiv2, #pgdiv3, #pgdiv4 {
+    width: 830px;
+    height: 450px;
+    overflow: auto;
+}
+
+#basis-summary ul {
+    margin-left: -15px;
+
+}
+
+#gdc-record-eval tbody tr td input {
+    margin-right: 0;
+}
+
+#gdc-record-eval tbody tr td {
+    text-align: center;
+    width: 30px;
+}
+
+#gdc-rec-tbl tr th {
+    font-weight: bold;
+    text-align: center;
+    background-color: #dcdcdc;
+    color: #000000;
+}
+#gdc-rec-tbl tr td.fld {
+    color: #000000;
+    background-color: #ececec;
+}
+#gdc-rec-tbl tr td.data {
+    color: #000000;
+    background-color: #f9f9f9;
+}
+#gdc-rec-tbl tr td.diff {
+    background-color: #ffffcb
+}
+#gdc-rec-tbl td.ICIJAttribution {
+    border: 1px solid lightgrey;
+}
+
+#gdc-reasons-container, #gdc-reasons-container-bulk {
+    display: none;
+}
+
+#gdc-reason-dropdown {
+    max-width: 200px;
+    margin-top: 4px;
+}
+
+#gdc-note {
+    height: 73px;
+    max-width: 100%;
+    width: 420px;
+    margin: 10px 0 0 0;
+    padding: 5px;
+    border: 1px solid #bababa;
+    webkit-border-radius: 4px;
+    moz-border-radius: 4px;
+    border-radius: 4px;
+}
+
+#gdc-note-bulk {
+    width: 400px;
+    margin: 10px 0 0 0;
+    padding: 5px;
+    border: 1px solid #bababa;
+    webkit-border-radius: 4px;
+    moz-border-radius: 4px;
+    border-radius: 4px;
+}
+
+div.surround-indent {
+    border: 1px solid #cccccc;
+    margin-left: 2.5em;
+    padding: 10px;
+}
+em.plain, em.note {
+    margin-left: 1.2em;
+    font-weight: normal;
+    font-style: normal;
+}
+em.note {
+    font-style: italic;
+}
+#gdc-case-info {
+    margin-bottom: {$caseInfoBtmMarg}px;
+}
+#gdc-case-info span {
+    display: inline-block;
+    margin: 0 5px 0 10px;
+    text-align: center;
+    font-weight: bold;
+}
+#gdc-case-info span img {
+    padding-bottom: 4px;
+}
+
+/* Media Monitor specific styles */
+.gdc-mm-list {
+    list-style-type: none;
+    padding-left: 0;
+}
+.gdc-li-tpl div {
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+.gdc-li-tpl div:hover {
+    background-color: #abdfff;
+    cursor: pointer;
+.}
+
+.gdc-mm-res-new {
+    display: table-cell;
+    width: 15px;
+}
+
+.gdc-mm-res-ttl,
+.gdc-mm-res-pct {
+    display: table-cell;
+    padding-right: 10px;
+}
+
+.gdc-mm-res-ttl:hover,
+.gdc-mm-res-pct:hover {
+    color: #ff9900;
+}
+
+.gdc-mm-res-url {
+    display: table-cell;
+    max-width: 255px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#gdc-mm-results-heading {
+   text-decoration: underline;
+   font-weight: bold;
+   text-transform: capitalize;
+   font-size: 12px;
+}
+</style>
+
+$waitSpinJS
+
+EOT;
+
+$loadYUImodules = ['cmsutil', 'button', 'tabview', 'dispatcher', 'json', 'inlinehelp'];
+$pageTitle = "Review Global Database Check";
+noShellHead(true);
+
+$globaldb = GLOBAL_DB;
+$isodb = ISO_DB;
+$spID = $_SESSION['vendorID'];
+$spdb = GLOBAL_SP_DB;
+
+$caseRec = $dbCls->fetchObjectRow("SELECT caseName, caseState, caseCountry, userCaseNum "
+    . "FROM cases WHERE id = '$e_caseID' AND clientID = '$e_clientID' LIMIT 1"
+);
+
+$e_caseCountry = preg_replace("/[^A-Z2]/", "", (string) $caseRec->caseCountry);
+
+$caseCountry = $dbCls->fetchValue("SELECT legacyName FROM $isodb.legacyCountries "
+    . "WHERE legacyCountryCode = '$e_caseCountry' LIMIT 1"
+);
+
+$caseFolderImage = '<span class="fas fa-folder" style="font-size: 50px;"></span>';
+$caseSummaryInfo = <<< EOT
+<table cellpadding="2" cellspacing="0">
+<tr>
+    <td><div class="fw-bold marg-rtsm">{$caseRec->userCaseNum}:</div></td>
+    <td class="fw-bold">$caseRec->caseName</td>
+</tr>
+<tr>
+    <td>State:</td>
+    <td>$caseRec->caseState</td>
+</tr>
+<tr>
+    <td>Country:</td>
+    <td>$caseCountry</td>
+</tr>
+</table>
+EOT;
+
+$gc = new GdcCase($caseID, $clientID);
+$cfg = $gc->getCfg();
+$staticNames = $gc->getStaticNames();
+
+// clean up names for direct JSON string assignment. Entered through unsanitized bulk upload?
+$srch = ['"', "'", "\r\n", "\r", "\n", "\t"];
+$rplc = ['', '&#039;', ' ', ' ', ' ', ' '];
+$aLimit = count($cfg);
+for ($i = 0; $i < $aLimit; $i++) {
+    $cfg[$i] = str_replace($srch, $rplc, (string) $cfg[$i]);
+}
+$staticNames['caseName'] = str_replace($srch, $rplc, (string) $staticNames['caseName']);
+$staticNames['siName'] = str_replace($srch, $rplc, (string) $staticNames['siName']);
+$aLimit = count($staticNames['siPrincipal']);
+for ($i = 0; $i < $aLimit; $i++) {
+    $staticNames['siPrincipal'][$i] = str_replace($srch, $rplc, (string) $staticNames['siPrincipal'][$i]);
+}
+
+$dupIdent = ($staticNames['caseName'] == $staticNames['siName']);
+$usedCaseName = false;
+$usedSubjectName = false;
+$trackPrin = [];
+foreach ($staticNames['siPrincipal'] as $prin) {
+    $trackPrin[$prin] = 0;
+}
+$tmp = [];
+foreach ($cfg as $c) {
+    $parts = explode('|', (string) $c);
+    $cnt = count($parts);
+    $eType = $parts[0];
+    $basis = $parts[1];
+    $src   = $parts[2];
+    $isPrin = false;
+    $a = ['incl' => 1, 'eType' => $eType, 'basis' => $basis, 'src' => $src];
+    switch ($src) {
+    case 'caseName':
+        $usedCaseName = true;
+        break;
+    case 'siName':
+        $usedSubjectName = true;
+        break;
+    case 'siPrincipal':
+        $isPrin = true;
+        break;
+    default:
+        $src = 'other';
+    }
+    if ($cnt == 5) {
+        $a['first'] = $first = $parts[3];
+        $a['last'] = $last = $parts[4];
+        $full = trim("$first $last");
+    } elseif ($cnt == 4) {
+        $a['name'] = $full = $parts[3];
+    }
+    $tmp[] = $a;
+    if ($isPrin && in_array($full, $trackPrin)) {
+        $trackPrin[$full] = 1;
+    }
+}
+if (!$dupIdent) {
+    if (!$usedCaseName && $staticNames['caseName']) {
+        $tmp[] = ['incl' => 0, 'eType' => 'E', 'basis' => 'full', 'src' => 'caseName', 'name' => $staticNames['caseName']];
+    }
+}
+if (!$usedSubjectName && $staticNames['siName']) {
+    $tmp[] = ['incl' => 0, 'eType' => 'E', 'basis' => 'full', 'src' => 'siName', 'name' => $staticNames['siName']];
+}
+// Append unused principals to list
+foreach ($trackPrin AS $prin => $incl) {
+    if ($incl) {
+        continue;
+    }
+    $first = $last = $full = '';
+    $isCompany = false;
+    $parsedName = guessNameParts($prin, $first, $last, $full, $isCompany);
+    // HB on 2014-04-22:
+    // Trigger has served its purpose, disabled until further notice.
+    /*if (!($parsedName = guessNameParts($prin, $first, $last, $full, $isCompany))
+        && (trim($full) != "")
+    ) {
+        nameParseException($clientID,__FILE__,__LINE__,$prin);
+    }*/
+    if ($first && $last) {
+        $tmp[] = ['incl' => 0, 'eType' => 'P', 'basis' => 'fila', 'src' => 'siPrincipal', 'first' => $first, 'last' => $last];
+    } elseif ($full) {
+        $tmp[] = ['incl' => 0, 'eType' => 'P', 'basis' => 'full', 'src' => 'siPrincipal', 'name' => $prin];
+    }
+}
+$curConfig = json_encode($tmp);
+
+$bulkAdjudEnabled = true; // Available by default
+
+function escJsText($txt)
+{
+    return str_replace("\n", '\n', (string) cleanMmTemplate($txt));
+}
+
+function cleanMmTemplate($txt)
+{
+    return str_replace('"', '\"', (string) mediaMonSlashes($txt));
+}
+
+function mediaMonSlashes($txt)
+{
+    return addcslashes(str_replace("\r", '', (string)$txt), "\0..\37'\\");
+}
+
+?>
+
+<script type="text/javascript">
+YAHOO.namespace('gdcdata');
+gdcdata = YAHOO.gdcdata; <?php // external reference ?>
+gdcdata.opActive = false;
+gdcdata.auth = '<?php echo $gdcReviewAuth; ?>';
+gdcdata.loadedDesc = [];
+gdcdata.redirectToReviewTab = false;
+
+YAHOO.namespace('ihelp');
+iHelp = YAHOO.ihelp;
+iHelp.data = [];
+iHelp.loaded = [];
+
+(function(){
+
+var Dom = YAHOO.util.Dom;
+var Event = YAHOO.util.Event;
+var Lang = YAHOO.lang;
+var Util = YAHOO.cms.Util;
+
+YAHOO.util.Get.css('../../../cms/css/gdc-media-monitor.css', {});
+YAHOO.util.Get.script(['../../../cms/js/media-monitor.js'], {});
+
+(function getMmHtml () {
+
+    <?php
+
+        $fileWithPath = str_replace('/cms/case', '', __DIR__) . '/assets/js/views/TPM/profileDetail/media-monitor-detail.html';
+        $fileContents = file_get_contents($fileWithPath);
+        $fileContEsc = escJsText($fileContents);
+
+    ?>
+    gdcdata.mmDetailTpl = '<?php echo $fileContEsc; ?>';
+})();
+
+<?php // tabs ?>
+YAHOO.util.Event.onDOMReady(function(){
+
+    var delegate = YAHOO.plugin.Dispatcher.delegate;
+    var tabViewS = new YAHOO.widget.TabView('subdemo',{'orientation':'top'});
+
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-status',
+        label: 'Review',
+        dataSrc: '/cms/case/gdc-status.sec<?php echo $loadScreening; ?>',
+        cacheData: true,
+        active: false
+    }), tabViewS);
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-history',
+        label: 'History',
+        dataSrc: '/cms/case/gdc-history.sec',
+        cacheData: false
+    }), tabViewS);
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-config',
+        label: 'Configure',
+        dataSrc: '/cms/case/gdc-config.sec',
+        cacheData: false
+    }), tabViewS);
+    delegate(new YAHOO.widget.Tab({
+        id: 'gdctab-sources',
+        label: 'Sources',
+        dataSrc: '/cms/thirdparty/profileDetail/gdc-sources.sec',
+        cacheData: true
+    }), tabViewS);
+    tabViewS.appendTo(document.body);
+
+    gdcdata.pgdivWidth = 800;
+    gdcdata.pgdivHeight = 450;
+    try {
+        gdcdata.oNameConfig = Lang.JSON.parse('<?php echo $curConfig; ?>');
+        gdcdata.nameConfig = Lang.JSON.parse('<?php echo $curConfig; ?>');
+    } catch (ex) {
+<?php if ($isDeveloper) {
+    $errRef = __FILE__ . ', ' . __LINE__;
+    echo "alert(\"$errRef:" . $dbCls->esc($curConfig) . "\")", ";\n";
+} else {
+    echo "alert('An error occurred while communicating with the server')", ";\n";
+}?>
+    }
+
+    var tabChanged = function(e){
+        var tab = tabViewS.getTab(e.newValue);
+        switch (tab.get('id').substr(7))
+        {
+        case 'status':
+            break;
+        case 'history':
+            break;
+        case 'config':
+            break;
+        }
+    };
+
+    gdcdata.loadScreening = function(scrID)
+    {
+        YAHOO.waitspin.stop('waitspinCfgTabDiv');
+        var tab = tabViewS.getTab(0);
+        tab.set('cacheData', false);
+        tab.set('dataSrc', '/cms/case/gdc-status.sec?scrID=' + scrID);
+        tabViewS.selectTab(0);
+        tab.set('cacheData', true);
+        return false;
+    };
+
+    gdcdata.jmpListDetail = function(scrID)
+    {
+        tabViewS.selectTab(3);
+        return false;
+    };
+
+    tabViewS.subscribe('activeIndexChange', tabChanged);
+    gdcdata.opActive = true;
+
+    var reg = parent.YAHOO.util.Dom.getRegion('gdcpnl_ifr');
+    var reg2 = Dom.getRegion('gdc-case-info');
+    gdcdata.pgdivHeight = reg.height - 45 - reg2.height;
+    gdcdata.pgdivWidth = reg.width - 10;
+    tabViewS.selectTab(0);
+
+    gdcdata.detailPnl = new YAHOO.widget.Panel('gdc-detail-view', {
+        close: false,
+        modal: true,
+        draggable: true,
+        visible: false
+    });
+    gdcdata.detailPnl.rendered = false;
+    Dom.replaceClass('gdc-detail-view', 'disp-none', 'display-block');
+
+    gdcdata.reviewLogPnl = new YAHOO.widget.Panel('gdc-review-log', {
+        close: true,
+        modal: true,
+        draggable: true,
+        visible: false
+    });
+
+    <?php // single elements ?>
+    gdcdata.gdcEvalOptions = document.getElementById('gdc-eval-options');
+    gdcdata.gdcRsnsContainer = document.getElementById('gdc-reasons-container');
+    gdcdata.gdcRsnsDropdown = document.getElementById('gdc-reason-dropdown');
+    gdcdata.gdcRsnsNote = document.getElementById('gdc-note');
+    gdcdata.gdcRsnID = document.getElementById('gdc-reasonid');
+    gdcdata.bulkAdjType = '';
+    gdcdata.bulkAdjTypeCurrent = '';
+
+    <?php // append appropriate options based on match or falsePositive ?>
+    gdcdata.gdcEvalOptions.onclick = function()
+    {
+        gdcdata.setContainerState(gdcdata.gdcRsnsContainer);
+        gdcdata.setDropdownReasons(gdcdata.gdcRsnsDropdown);
+        gdcdata.setNoteState(gdcdata.gdcRsnsDropdown, gdcdata.gdcRsnsNote);
+    };
+
+    <?php // Sets the bulk status for the bulk adjudication UI ?>
+    gdcdata.setBulkState = function(bulk)
+    {
+        gdcdata.bulkState = bulk;
+    };
+
+    <?php // handles adjudication reasons provided from gdc-ws.sec ?>
+    gdcdata.loadAdjudicationReasons = function(record, match, falsePositive, reason)
+    {
+        <?php // set the match and false positive reasons ?>
+        match = (typeof match !== 'undefined') ? match : null;
+        falsePositive = (typeof falsePositive !== 'undefined') ? falsePositive : null;
+        reason = (typeof reason !== 'undefined') ? reason : null;
+        gdcdata.globalReasons = {};
+        gdcdata.entityReasons = {};
+        gdcdata.globalReasons.match = match;
+        gdcdata.globalReasons.falsePositive = falsePositive;
+        <?php // determine if reasons have been loaded, if not don't bother setting the entityReasons ?>
+        if (typeof match === 'object' && typeof falsePositive === 'object') {
+            gdcdata.entityReasons.match = match;
+            gdcdata.entityReasons.falsePositive = falsePositive;
+        }
+        if (typeof reason == 'object') {
+            gdcdata.entityReasons.current = reason;
+        }
+    };
+
+    <?php // set the container to the appropriate state for current selection and account for existing reasons ?>
+    gdcdata.setInitialState = function(container, dropdown)
+    {
+        <?php // reset the determination in the bulk UI ?>
+        var und = document.getElementById('bulk_match_undetermined');
+
+        if (und) {
+            und.checked = true;
+        }
+
+        gdcdata.setContainerState(container);
+        if (gdcdata.entityReasons.current !== null && gdcdata.entityReasons.current !== '') {
+            var flag = gdcdata.getFlag();
+            var previousReason = {
+                'listText' : 'Previous Reason...',
+                'noteText' : gdcdata.entityReasons.current.reasonText,
+                'previousReason' : true,
+                'previousReasonID' : gdcdata.entityReasons.current.reasonID
+            };
+
+            if (typeof gdcdata.entityReasons[flag] === 'object') {
+                gdcdata.entityReasons[flag].push(previousReason);
+            }
+
+        }
+        <?php // set options for the drop down ?>
+        gdcdata.setDropdownReasons(dropdown);
+        if (gdcdata.entityReasons.current !== null) {
+            gdcdata.setNoteState(dropdown, gdcdata.gdcRsnsNote, gdcdata.entityReasons.current.reasonText);
+        } else {
+            gdcdata.setNoteState(dropdown, gdcdata.gdcRsnsNote, null);
+        }
+        gdcdata.setReasonID(dropdown);
+    };
+
+    <?php // Set the reasons in the drop down ?>
+    gdcdata.setDropdownReasons = function(dropdown)
+    {
+        if (dropdown == undefined || dropdown == null) {
+            return;
+        }
+
+        var current = dropdown.current;
+        var flag = gdcdata.getFlag();
+
+        <?php // account for different value for flag on bulk vs single gdc ?>
+        if (flag === 'false') { flag = 'falsePositive'; }
+        if (flag === 'true') { flag = 'match'; }
+        if (current !== flag) {
+            current = flag;
+            dropdown.innerHTML = "";
+            var opt = document.createElement('option');
+            opt.value = '';
+            opt.innerHTML = 'Choose...';
+            dropdown.appendChild(opt);
+            var hasPrevious = false;
+            var selection = (gdcdata.bulkState) ? "globalReasons" : "entityReasons";
+
+            for (var reason in gdcdata[selection][flag]) {
+                var opt = document.createElement('option');
+                opt.value = gdcdata[selection][flag][reason]['noteText'];
+                opt.innerHTML = gdcdata[selection][flag][reason]['listText'];
+                opt.setAttribute('data-reasonid', gdcdata[selection][flag][reason]['id']);
+                dropdown.appendChild(opt);
+
+                <?php // if the element we are currently appending is the previous reason, select it ?>
+                if (gdcdata[selection][flag][reason]['previousReason'] === true) {
+                    hasPrevious = true;
+                    opt.selected = true;
+                    opt.setAttribute('data-reasonid', gdcdata[selection][flag][reason]['previousReasonID']);
+                }
+            }
+            <?php // if we did not receive a previous reason, select the first reason under the current flag ?>
+            if (gdcdata[selection].current == null && flag !== 'undetermined') {
+                var note = dropdown.options[dropdown.selectedIndex].value;
+                gdcdata.setNoteState(dropdown, gdcdata.gdcRsnsNote, note);
+            }
+            <?php // append "other" option to drop down ?>
+            var other = document.createElement('option');
+            other.value = '';
+            other.innerHTML = 'Other';
+            if (hasPrevious) {
+                dropdown.insertBefore(other, dropdown.options[dropdown.options.length - 1]);
+            } else {
+                dropdown.appendChild(other);
+            }
+        }
+        gdcdata.setReasonID(dropdown);
+    };
+
+    <?php // Limits the note length of the adjudication reason textarea ?>
+    gdcdata.limitNoteLength = function(e)
+    {
+        var Dom = YAHOO.util.Dom;
+        var el = gdcdata.bulkState === true ? Dom.get('gdc-note-bulk') : Dom.get('gdc-note');
+        var ncID = gdcdata.bulkState === true ? Dom.get('chars-bulk') : Dom.get('chars-single');
+        var maxlen = 2000;
+        var have = el.value.length;
+        var remain = maxlen - have;
+        if (remain < 0)
+            remain = 0;
+        ncID.innerHTML = remain;
+        if (have > maxlen) {
+            el.value = el.value.substring(0, maxlen);
+            gdcdata.showResultDiag('Limit Reached', 'Your Note has reached the maximum size.');
+        }
+    };
+
+    <?php // Set the textarea text when the selected reason changes ?>
+    gdcdata.gdcRsnsDropdown.onchange = function()
+    {
+        gdcdata.setNoteState(gdcdata.gdcRsnsDropdown, gdcdata.gdcRsnsNote);
+    };
+
+    <?php // Gets the "flag" or determination based on the bulk state ?>
+    gdcdata.getFlag = function()
+    {
+        var flag = '';
+        if (!gdcdata.bulkState) {
+            flag = Util.getRadioValue('gdc-record-eval', 'gdc-eval');
+        } else {
+            flag = Util.getRadioValue('gdc-record-eval-bulk', 'bulk_match');
+        }
+        return flag;
+    };
+
+    <?php // Set the state of the container ?>
+    gdcdata.setContainerState = function(container)
+    {
+        var flag = gdcdata.getFlag();
+
+        if (flag === 'match' || flag === 'true' || flag === 'falsePositive' || flag === 'false') {
+            if (container !== undefined && container !== null) {
+                container.style.display = "block";
+                container.inUse = true;
+            }
+        } else {
+            if (container !== undefined && container !== null) {
+                container.style.display = "none";
+                container.inUse = false;
+            }
+            if (!gdcdata.bulkState) {
+                gdcdata.setNoteState(gdcdata.gdcRsnsDropdown, gdcdata.gdcRsnsNote, "");
+            } else {
+                gdcdata.setNoteState(gdcdata.gdcRsnsDropdownBulk, gdcdata.gdcRsnsNoteBulk, "");
+            }
+        }
+
+        if (typeof gdcdata.entityReasons.match !== 'object'
+            || typeof gdcdata.entityReasons.falsePositive !== 'object') {
+            console.log('undefined reasons');
+        }
+    };
+
+    <?php // Set the note state ?>
+    gdcdata.setNoteState = function(dropdown, note, reason)
+    {
+        if (dropdown == null || dropdown == undefined) {
+            return;
+        }
+        reason = (typeof reason !== 'undefined') ? reason : null;
+        if (dropdown.offsetParent !== null) {
+            if (reason == null || reason == 'undefined' || reason.length == 0) {
+                if (dropdown.options.length) {
+                    reason = dropdown.options[dropdown.selectedIndex].value;
+                }
+            }
+        }
+        <?php // if the default 'choose' option is currently selected, empty note text and hide textarea?>
+        if (dropdown.selectedIndex == 0) {
+            note.style.display = "none";
+            note.value = "";
+        } else {
+            note.style.display = "block";
+        }
+        reason = (reason == 'null' || reason == null) ? '' : reason;
+        <?php // duck typing IE8 and IE9 in quirks mode to prevent note setting failure ?>
+        if (window.attachEvent && !window.addEventListener) {
+            note.value = reason;
+        } else {
+            var placeholder = document.createElement("textarea");
+            placeholder.innerHTML = reason;
+            note.value = placeholder.value;
+        }
+        gdcdata.limitNoteLength();
+        gdcdata.setReasonID(dropdown);
+    };
+
+    gdcdata.setReasonID = function(dropdown)
+    {
+        if (dropdown == null || dropdown == undefined) {
+            return;
+        }
+        var reasonID = null;
+        if (gdcdata.getFlag() === 'undetermined') {
+            (gdcdata.bulkState) ? gdcdata.gdcRsnIDBulk.value = reasonID : gdcdata.gdcRsnID.value = reasonID;
+        } else if (dropdown.offsetParent !== null && dropdown.options.length) {
+            var current = dropdown.options[dropdown.selectedIndex];
+            reasonID = current.getAttribute('data-reasonid');
+            <?php // set the hidden input for our reasonID?>
+            (gdcdata.bulkState) ? gdcdata.gdcRsnIDBulk.value = reasonID : gdcdata.gdcRsnID.value = reasonID;
+        }
+    };
+
+    gdcdata.reviewLogPnl.rendered = false;
+    Dom.replaceClass('gdc-review-log', 'disp-none', 'display-block');
+
+    <?php // Hide and show iframe modal's close button when detail panel is active ?>
+    gdcdata.detailPnl.showEvent.subscribe(function(o){
+        parent.window.YAHOO.gdcifr.showPanelClose(false);
+    });
+    gdcdata.detailPnl.hideEvent.subscribe(function(o){
+        parent.window.YAHOO.gdcifr.showPanelClose(true);
+    });
+
+    gdcdata.detailUpdateBtn = new YAHOO.widget.Button('gdc-detail-update-btn', {
+        label: 'Update',
+        type: 'button'
+    });
+    gdcdata.detailUpdateBtn.on('click', function(o){
+        var btn = document.getElementById('gdc-detail-update-btn-button');
+        var flag = Util.getRadioValue('gdc-record-eval', 'gdc-eval');
+        var reason = (gdcdata.gdcRsnsNote.value !== null) ? gdcdata.gdcRsnsNote.value : "";
+        var reasonID = (gdcdata.gdcRsnID.value !== null) ? gdcdata.gdcRsnID.value : "";
+        var loc = (btn.getAttribute('data-location') == 'save-eval') ? 'save-eval' : 'mm-save-eval';
+        var id = (loc == 'save-eval') ? null : btn.getAttribute('data-source_recid');
+        if (loc == 'save-eval') {
+            gdcdata.opRequest(loc, flag, reason, reasonID);
+        } else {
+            gdcdata.opRequest(loc, flag, reason, reasonID, id);
+        }
+
+        gdcdata.entityReasons = {};
+    });
+
+    <?php // counts the number of elements which are visible on the page ?>
+    gdcdata.countVisibleElements = function(elements)
+    {
+        var counter = 0;
+        if (!elements) {
+            return counter;
+        }
+        [].forEach.call(elements, function (el) {
+            if (el.style.display != 'hidden' && el.style.display != 'none') {
+                counter++;
+            }
+        });
+        return counter;
+    };
+
+    <?php // counts the number of checkboxes with checked property ?>
+    gdcdata.getCheckedState = function(elements)
+    {
+        var counter = 0;
+        if (!elements) {
+            return counter;
+        }
+        [].forEach.call(elements, function (el) {
+            if (el.checked) {
+                counter++;
+            }
+        });
+        return counter;
+    };
+
+    <?php // determines how many checkboxes exist for both result types as well as their checked status ?>
+    gdcdata.getBulkResultDetails = function()
+    {
+        var struct = {
+            gdcCount : 0,
+            mmCount  : {
+                top    : 0,
+                bottom : 0
+            },
+            gdcChecked : 0,
+            mmChecked  : {
+                total  : 0,
+                top    : 0,
+                bottom : 0
+            }
+        };
+
+        var gdcChk      = document.getElementsByClassName('gdc-res-chk');
+        var mmChkTop    = document.querySelectorAll('[data-anchor="top"]');
+        var mmChkBottom = document.querySelectorAll('[data-anchor="bottom"]');
+        var mmChk       = document.getElementsByClassName('gdc-mm-res-chk');
+
+        struct.gdcCount         = gdcdata.countVisibleElements(gdcChk);
+        struct.mmCount.top      = gdcdata.countVisibleElements(mmChkTop);
+        struct.mmCount.bottom   = (gdcdata.countVisibleElements(mmChkBottom)-1);
+        struct.gdcChecked       = gdcdata.getCheckedState(gdcChk);
+        struct.mmChecked.top    = gdcdata.getCheckedState(mmChkTop);
+        struct.mmChecked.bottom = gdcdata.getCheckedState(mmChkBottom);
+        struct.mmChecked.total  = (struct.mmChecked.top + struct.mmChecked.bottom);
+
+        return struct;
+    };
+
+    <?php // an attempt at reproducing array.length for objects with IE9+ compatibility ?>
+    gdcdata.getObjectLength = function(object)
+    {
+        var length = 0;
+        for( var key in object ) {
+            if( object.hasOwnProperty(key) ) {
+                ++length;
+            }
+        }
+        return length;
+    };
+
+    gdcdata.detailUpdateBtn = new YAHOO.widget.Button('gdc-detail-update-btn', {
+        label: 'Update',
+        type: 'button'
+    });
+
+    gdcdata.detailCancelBtn = new YAHOO.widget.Button('gdc-detail-cancel-btn', {
+        label: 'Cancel',
+        type: 'button'
+    });
+    gdcdata.detailCancelBtn.on('click', function(o){
+        gdcdata.gdcRsnsContainer.style.display = 'none';
+        gdcdata.detailPnl.hide();
+        gdcdata.setBulkState(true);
+    });
+
+});
+
+var gdcFlagSym = { <?php
+$first = 1;
+foreach ($gdc->flagImage as $flag => $img) {
+    if (!$first) {
+        echo ",\n";
+    } else {
+        $first = 0;
+    }
+    echo "$flag: '$img'";
+}
+echo "\n";
+?>
+};
+
+gdcdata.showSingleRecord = function(rec, recFlag, isCurrent) {
+    Dom.get('gdc-detail').innerHTML = '&nbsp;';
+    Dom.setStyle('gdc-detail', 'width', '430px');
+    var txt = '<table id="gdc-rec-tbl" width="400" cellspacing="2" cellpadding="3">\n'
+        + '<tr>\n'
+        + '  <th width="40%">Field</th>\n'
+        + '  <th>Data</th>\n'
+        + '</tr>\n';
+    var isICIJ = false;
+    var hidden = [
+        'MM',
+        'Hash',
+        'screeningID',
+        'tpID',
+        'RecType',
+        'source_recid'
+    ];
+    for (var fld in rec) {
+        if (hidden.indexOf(fld) !== -1) {
+            continue;
+        }
+        if (fld == 'MediaLink') {
+            txt += '<tr>\n'
+                + '  <td class="fld">' + "Media Link" + '</td>\n'
+                + '  <td class="data"><a target="_blank" href="' + rec[fld] + '">' + rec[fld] + '</a></td>\n'
+                + '</tr>\n';
+        } else {
+            txt += '<tr>\n'
+                + '  <td class="fld">' + fld + '</td>\n'
+                + '  <td class="data">' + rec[fld] + '</td>\n'
+                + '</tr>\n';
+        }
+
+        if (fld == 'Refinement' && rec['Refinement'] == '') {
+            continue;
+        }
+
+        if ((rec[fld] == 'ICIJ') || (rec[fld] == 'International Consortium of Investigative Journalists')) {
+            isICIJ = true;
+        }
+
+        var titleTxt = document.getElementById('panelFormTitle');
+        var reviewLink = document.getElementById('gdc-review-link');
+        var updateBtn = document.getElementById('gdc-detail-update-btn-button');
+        if (rec.hasOwnProperty('MM')) {
+            titleTxt.innerHTML = 'Source Record Detail from Media Monitor';
+            reviewLink.setAttribute("onClick", "gdcdata.opRequest('mm-review-log', '"
+                + rec.source_recid + "', '" + rec.tpID + "')");
+            updateBtn.setAttribute("data-location", "mm-save-eval");
+            updateBtn.setAttribute("data-source_recid", rec.source_recid);
+        } else {
+            titleTxt.innerHTML = 'Source Record Detail from Global Database Check';
+            reviewLink.setAttribute("onClick", "gdcdata.opRequest('review-log')");
+            updateBtn.setAttribute("data-location", "save-eval");
+        }
+    }
+    if (isICIJ) {
+        txt += gdcdata.getICIJAttribution();
+    }
+    txt += '</table>';
+    Dom.get('gdc-detail').innerHTML = txt;
+    var flagID = 'gdc-eval-' + recFlag;
+    var flag = Dom.get(flagID);
+    if (flag != null) {
+        Dom.get(flagID).checked = true;
+    }
+    if (isCurrent) {
+        Dom.removeClass('gdc-detail-update-btn', 'v-hidden');
+        gdcdata.detailCancelBtn.set('label', 'Cancel');
+    } else {
+        Dom.addClass('gdc-detail-update-btn', 'v-hidden');
+        gdcdata.detailCancelBtn.set('label', 'Close');
+    }
+    gdcdata.showDetailPanel();
+};
+
+gdcdata.showDualRecords = function(rec, prec, flag, isCurrent) {
+    Dom.get('gdc-detail').innerHTML = '&nbsp;';
+    Dom.setStyle('gdc-detail', 'width', '672px');
+    var pimg = '<img src="' + gdcFlagSym[flag] + '" alt="" title="" />';
+    var txt = '<table id="gdc-rec-tbl" width="643" cellspacing="2" cellpadding="3">\n'
+        + '<tr>\n'
+        + '  <th width="25%">Field</th>\n'
+        + '  <th width="37%">Data</th>\n'
+        + '  <th>Previous Data &nbsp; ' + pimg + '</th>\n'
+        + '</tr>\n';
+    var isICIJ = false;
+    for (var fld in rec) {
+        var cls = 'data';
+        switch (fld) {
+        case 'Published':
+        case 'Updated':
+            break;
+        default:
+            if (rec[fld] != prec[fld]) {
+                cls = 'diff';
+            }
+        }
+        txt += '<tr>\n'
+            + '  <td class="fld">' + fld + '</td>\n'
+            + '  <td class="' + cls + '">' + rec[fld] + '</td>\n'
+            + '  <td class="data">' + prec[fld] + '</td>\n'
+            + '</tr>\n';
+        if ((rec[fld] == 'ICIJ') || (rec[fld] == 'International Consortium of Investigative Journalists')) {
+            isICIJ = true;
+        }
+    }
+    if (isICIJ) {
+        txt += gdcdata.getICIJAttribution();
+    }
+    txt += '</table>';
+    Dom.get('gdc-detail').innerHTML = txt;
+    var flagID = 'gdc-eval-' + flag;
+    var flag = Dom.get(flagID);
+
+    if (flag != null) {
+        Dom.get(flagID).checked = true;
+    }
+
+    if (isCurrent) {
+        Dom.removeClass('gdc-detail-update-btn', 'v-hidden');
+    } else {
+        Dom.addClass('gdc-detail-update-btn', 'v-hidden');
+    }
+    gdcdata.showDetailPanel();
+};
+
+gdcdata.getICIJAttribution = function()
+{
+   var txt = '<tr>\n'
+        + '  <td class="ICIJAttribution" colspan="2">'
+        + 'Contains information from the International Consortium of Investigative Journalists Offshore Leaks '
+        + 'Database: [https://offshoreleaks.icij.org/pages/database], which is made available here under the '
+        + 'Open Database License (ODbL).'
+        + '</td>\n'
+        + '</tr>\n';
+    return txt;
+};
+
+gdcdata.showDetailPanel = function()
+{
+    var pnl = gdcdata.detailPnl;
+    if (!pnl.rendered) {
+        pnl.render(document.body);
+        pnl.rendered = true;
+    }
+    <?php // Fit report to content or max height at 95% of viewport ?>
+    var rptEl = Dom.get('gdc-detail'); <?php // formatted detail container ?>
+    var pnlEl = Dom.get('gdc-detail-view'); <?php // panel ?>
+    Dom.getElementsByClassName('bd', 'div', pnlEl, function(el){
+        Dom.setStyle(el,'background-color','#ffffff');
+    });
+    var region = Dom.getClientRegion();
+    Dom.setStyle(rptEl, 'overflow', 'hidden');
+    Dom.setStyle(rptEl, 'height', '0pt');
+    pnl.center();
+    pnl.show();
+    var maxPanelHeight = 0.98 * (region.bottom - region.top);
+    var curPanelHeight = parseInt(Dom.getStyle(pnlEl, 'height'));
+    if (isNaN(curPanelHeight)) {
+        curPanelHeight = parseInt(pnlEl.offsetHeight);
+        if (isNaN(curPanelHeight)) {
+            curPanelHeight = 197; <?php // I give up! How 'bout a guess? ?>
+        }
+    }
+    var pixToAdd = rptEl.scrollHeight + 5;
+    if ((curPanelHeight + pixToAdd) > maxPanelHeight) {
+        pixToAdd = maxPanelHeight - curPanelHeight;
+    }
+    if (pixToAdd < 30) {
+        pixToAdd = 30;
+    }
+    var topToMove = pixToAdd / 2;
+    var curPanelTop = pnl.cfg.getProperty('y');
+    pnl.cfg.setProperty('y', curPanelTop - topToMove);
+    Dom.setStyle(rptEl, 'overflow', 'auto');
+    Dom.setStyle(rptEl, 'height', pixToAdd + 'px');
+};
+
+iHelp.autoLoad = function(help_id, el){
+    if (!Util.in_array(help_id, iHelp.loaded))
+        gdcdata.opRequest('load-help', help_id, el);
+    else
+        iHelp.toggle(help_id, el);
+    return false;
+};
+
+gdcdata.multiError = function(title, msgArray)
+{
+    if (title.length && msgArray.length)
+    {
+        var i, msg;
+        if (Lang.isArray(msgArray))
+        {
+            if (msgArray.length == 1) {
+                msg = '<b>An error occurred</b>:<ul>';
+            } else {
+                msg = '<b>The following errors occurred</b>:<ul>';
+            }
+            for (i in msgArray) {
+                msg += '<li>' + msgArray[i] + '</li>';
+            }
+            msg += '</ul>';
+        } else {
+            msg = msgArray;
+        }
+        gdcdata.showResultDiag(title, msg);
+    }
+};
+
+gdcdata.showResultDiag = function(headHTML, bodyHTML)
+{
+    if (!resultDiag.rendered) {
+        resultDiag.rendered = true;
+        resultDiag.render(document.body);
+    }
+    resultDiag.setHeader(headHTML);
+    resultDiag.setBody(bodyHTML);
+    resultDiag.show();
+};
+
+var resultDiag = new YAHOO.widget.SimpleDialog("result-dlg", {
+    width: "300px",
+    fixedcenter: "contained",
+    visible: false,
+    modal: true,
+    draggable: true,
+    close: false,
+    constraintoviewport: false,
+    buttons: [
+        {
+        text:"Ok", handler: function()
+        {
+            this.hide();
+            if (gdcdata.redirectToReviewTab == true) {
+                gdcdata.redirectToReviewTab = false;
+                gdcdata.loadScreening(<?php if (isset($_GET['ls'])) { echo $_GET['ls']; } ?>);
+            }
+        }, isDefaut:true }
+    ]
+});
+resultDiag.rendered = false;
+
+<?php if ($bulkAdjudEnabled) { ?>
+    gdcdata.SelectAll = function(mode)
+    {
+        var gdcChk     = document.getElementsByClassName('gdc-res-chk');
+        var mmChk      = document.getElementsByClassName('gdc-mm-res-chk');
+        var checkboxes = (mode == 'gdc') ? gdcChk : mmChk;
+        var opposite   = (mode == 'gdc') ? mmChk : gdcChk;
+        var length     = (mode == 'gdc') ? gdcChk.length : mmChk.length;
+
+        if (gdcdata.getCheckedState(opposite) == 0) {
+            for (var i = 0; i < length; i++) {
+                checkboxes[i].checked = true;
+            }
+        }
+
+        gdcdata.updateBulkUI();
+    };
+
+    gdcdata.UnselectAll = function (mode)
+    {
+        var gdcChk     = document.getElementsByClassName('gdc-res-chk');
+        var mmChk      = document.getElementsByClassName('gdc-mm-res-chk');
+        var checkboxes = (mode == 'gdc') ? gdcChk : mmChk;
+        var opposite   = (mode == 'gdc') ? mmChk : gdcChk;
+        var length     = (mode == 'gdc') ? gdcChk.length : mmChk.length;
+
+        if (gdcdata.getCheckedState(opposite) == 0) {
+            for (var i = 0; i < length; i++) {
+                checkboxes[i].checked = false;
+            }
+        }
+
+        gdcdata.updateBulkUI();
+    };
+
+    gdcdata.InvertAll = function (mode)
+    {
+        var gdcChk     = document.getElementsByClassName('gdc-res-chk');
+        var mmChk      = document.getElementsByClassName('gdc-mm-res-chk');
+        var checkboxes = (mode == 'gdc') ? gdcChk : mmChk;
+        var opposite   = (mode == 'gdc') ? mmChk : gdcChk;
+        var length     = (mode == 'gdc') ? gdcChk.length : mmChk.length;
+
+        if (gdcdata.getCheckedState(opposite) == 0) {
+            for (var i = 0; i < length; i++) {
+                checkboxes[i].checked = (checkboxes[i].checked == true) ? false : true;
+            }
+        }
+
+        gdcdata.updateBulkUI();
+    };
+
+    gdcdata.showBulkDiag = function(headHTML, bodyHTML)
+    {
+        var totalids=document.getElementsByName('bulkids[]').length;
+        var total_selected = 0;
+        for (var i=0; i<totalids; i++) {
+            var val = document.getElementsByName('bulkids[]')[i].checked;
+            if (val == true) {
+                total_selected++;
+            }
+        }
+        if (total_selected > 0) {
+            if (!bulkDialog.rendered) {
+                bulkDialog.rendered = true;
+                bulkDialog.render(document.body);
+            }
+            bulkDialog.setHeader(headHTML);
+            var elements=document.getElementsByName('bulk_match');
+            for (i=0; i<elements.length; i++) {
+                if (elements[i].checked) {
+                    var bulkmatch=i;
+                }
+            }
+            if (bulkmatch == 0) {
+                var determination_str = 'True Match';
+            } else if (bulkmatch == 1) {
+                var determination_str = 'Undetermined';
+            } else {
+                var determination_str = 'False Positive';
+            }
+            var msg = bodyHTML + '<br /><br />Record(s) selected: <strong>' + total_selected
+                + '</strong><br /><br />Proceed with applying bulk determination'
+                + ' of <strong>`' + determination_str + '`</strong> to selected record(s)?';
+            bulkDialog.setBody(msg);
+            bulkDialog.show();
+        } else {
+            if (!resultDiag.rendered) {
+                resultDiag.rendered = true;
+                resultDiag.render(document.body);
+            }
+            resultDiag.setHeader('Error');
+            resultDiag.setBody('You must select at least one record to apply bulk determination');
+            resultDiag.show();
+        }
+    };
+
+    var bulkDialog = new YAHOO.widget.SimpleDialog("bulk-dlg", {
+        width: "450px",
+        fixedcenter: "contained",
+        visible: false,
+        modal: true,
+        draggable: true,
+        close: false,
+        constraintoviewport: false,
+        buttons: [ { text:"Proceed", handler: function()
+                     {
+                         <?php // Determine each of screening IDs and whether screening IDs are selected ?>
+                         var totalids=document.getElementsByName('bulkids[]').length;
+                         var bulkids = new Array();
+                         var bulkvals = new Array();
+                         var min_selected = false;
+                         var bulkreason = gdcdata.gdcRsnsNoteBulk.value;
+                         var bulkreasonID = gdcdata.gdcRsnIDBulk.value;
+                         for (var i=0; i<totalids; i++) {
+                             bulkids[i] = document.getElementsByName('bulkids[]')[i].value;
+                             if (document.getElementsByName('bulkids[]')[i].checked == true) {
+                                 bulkvals[i]='1';
+                             } else {
+                                 bulkvals[i]='0';
+                             }
+                         }
+                         <?php // Determines the ID of the selected bulk action ?>
+                         var elements=document.getElementsByName('bulk_match');
+                         for (i=0; i<elements.length; i++) {
+                             if (elements[i].checked) {
+                                 var bulkmatch=i;
+                             }
+                         }
+                         <?php // check adjudication mode and call appropriate case ?>
+                         if (gdcdata.bulkAdjType == 'gdc') {
+                             gdcdata.opRequest('bulk-update', bulkids, bulkvals, bulkmatch,
+                                 encodeURIComponent(bulkreason), bulkreasonID);
+                         } else if (gdcdata.bulkAdjType == 'mm') {
+                             gdcdata.opRequest('mm-bulk-update', bulkids, bulkvals, bulkmatch,
+                                 encodeURIComponent(bulkreason), bulkreasonID);
+                         }
+                         this.hide();
+                     }, isDefaut:true }
+                  ,
+                       { text:"Cancel", handler: function()
+                         {
+                             this.hide();
+                         }, isDefaut:false }
+                 ]
+    });
+    bulkDialog.rendered = false;
+<?php
+}
+?>
+    gdcdata.listDesc = function(ele, listId)
+    {
+        if (!Util.in_array(listId, gdcdata.loadedDesc))
+            gdcdata.opRequest('listDesc', listId, ele);
+        else
+            iHelp.toggle(listId, ele);
+    };
+
+    gdcdata.opRequest = function(op, arg1, arg2, arg3, arg4, arg5)
+    {
+        if (!gdcdata.opActive) return false;
+        var postData = "op=" + op
+            + '&gdcReviewAuth=' + gdcdata.auth;
+        switch (op) {
+        case 'prep-name':
+            postData += '&fi=' + encodeURIComponent(arg1)
+                + '&la=' + encodeURIComponent(arg2)
+                + '&fu=' + encodeURIComponent(arg3)
+                + '&et=' + encodeURIComponent(arg4);
+            break;
+        <?php if ($bulkAdjudEnabled) { ?>
+        case 'bulk-reasons':
+            postData += '&adjMode=' + arg1;
+            break;
+        case 'mm-bulk-update':
+        case 'bulk-update':
+            postData += '&bulkids=' + arg1 + '&bulkvals=' + arg2 + '&bulkmatch=' + arg3 +
+                '&bulkreason=' + encodeURIComponent(arg4) + '&bulkreasonID=' + arg5;
+            break;
+
+    <?php
+}
+?>
+    case 'gdc-run-monitor':
+    case 'gdc-run':
+    case 'mm-review-log':
+        var c = Lang.JSON.stringify(gdcdata.nameConfig);
+        postData += '&cfg='
+            + encodeURIComponent(Util.encode64(c));
+        postData += '&source_recid=' + arg1
+            + '&tpID=' + arg2;
+        break;
+    case 'review-log':
+        break;
+
+    case 'update-summary':
+        break;
+
+    case 'mm-save-eval':
+    case 'save-eval':
+        gdcdata.detailPnl.hide();
+        postData += '&flag=' + arg1;
+        postData += '&reason=' + encodeURIComponent(arg2);
+        postData += '&reasonID=' +arg3;
+        if (op == 'mm-save-eval') {
+            postData += '&source_recid=' + arg4;
+        }
+        break;
+
+    case 'load-detail':
+        postData += '&tbl=' + arg1
+            + '&ref=' + arg2
+            + '&reason=' + encodeURIComponent(arg3)
+            + '&reasonID=' + arg4
+            + '&type=' + arg5;
+        break;
+
+    case 'load-mm-detail':
+        postData += '&source_recid=' + arg1
+            + '&reason=' + encodeURIComponent(arg2)
+            + '&reasonID=' + arg3
+            + '&type=' + arg4;
+        break;
+
+    case 'alter-show':
+        postData += '&fp=' + arg1 + '&uc=' + arg2;
+        break;
+
+    case 'mm-load-result':
+    case 'load-result':
+        var i, el, els = Dom.getElementsBy(function(e) {
+            var id = Dom.getAttribute(e, 'id');
+            var res = (id != null && id != undefined && id.match(/^trRes\d+$/));
+            return res; }, 'tr', 'subject-list'
+        );
+        for (i in els) {
+            el = els[i];
+            if (el.id == 'trRes' + arg1) {
+                Dom.addClass(el, 'hi');
+            } else {
+                Dom.removeClass(el, 'hi');
+            }
+        }
+        postData += '&r=' + arg1
+            + '&s=' + arg2;
+        Dom.removeClass('review-symbols', 'disp-none');
+        gdcdata.setBulkState(true);
+        break;
+
+    case 'load-help':
+        postData += '&id=' + arg1;
+        break;
+<?php
+if ($session->secure_value('accessLevel') == SUPER_ADMIN) {
+    ?>
+    case 'manual-run':
+        break;
+    <?php
+} ?>
+    case 'listDesc':
+        postData += '&id=' + arg1;
+        break;
+    case 'fetch-ent':
+        postData += '&list=' + arg1;
+        postData += '&id=' + arg2;
+        postData += '&ver=' + encodeURIComponent(arg3);
+        break;
+    default:
+        alert('operation not configured');
+        return false;
+    }
+
+    var handleOperation = function(o) {
+        var res = false;
+        var op = o.argument[0];
+        try {
+            res = Lang.JSON.parse(o.responseText);
+        } catch (ex) {
+<?php
+if (SECURIMATE_ENV == 'Development' || $session->secure_value('accessLevel') == SUPER_ADMIN) {
+    ?>
+            alert('responseText: ' + o.responseText);
+    <?php
+} else {
+    ?>
+            alert('An error occurred while communicating with the server');
+    <?php
+} ?>
+            return;
+        }
+        gdcdata.auth = res.gdcReviewAuth;
+        switch (op) {
+        case 'prep-name':
+            if (res.Result == 1) {
+                YAHOO.gdccfg.updateConfig(res.First, res.Last, res.Full, res.eType);
+            } else if (res.Result != 2) {
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+            }
+            break;
+
+        case 'gdc-run-monitor':
+            if (res.Reload != 0) {
+                gdcdata.loadScreening(res.Reload);
+            } else {
+                gdcdata.opRequest('gdc-run-monitor');
+            }
+            break;
+
+        case 'gdc-run':
+            if (res.Result == 1) {
+                gdcdata.loadScreening(res.ScreeningID);
+            } else if (res.Result != 2) {
+                gdcdata.redirectToReviewTab = true;
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+            }
+            break;
+
+        case 'mm-review-log':
+        case 'review-log':
+            if (!gdcdata.reviewLogPnl.rendered) {
+                gdcdata.reviewLogPnl.render(document.body);
+                gdcdata.reviewLogPnl.rendered = true;
+            }
+            Dom.get('gdc-review-log-content').innerHTML = res.HTML;
+            gdcdata.reviewLogPnl.center();
+            gdcdata.reviewLogPnl.show();
+            break;
+
+        case 'bulk-reasons':
+        case 'update-summary':
+            if (res.ReviewExplain && res.ReviewExplain.length > 0) {
+                Dom.get('gdc-review-status').innerHTML = res.ReviewExplain;
+            }
+            if (res.SumsCnt > 0) {
+                var ref, id, vals;
+                for (ref in res.Sums) {
+                    id = ref.substr(1);
+                    if (document.getElementById('sl-rvw' + id)) {
+                        vals = res.Sums[ref];
+                        Dom.get('sl-rvw' + id).innerHTML = vals['rvw'];
+                        Dom.get('sl-tm' + id).innerHTML = vals['tm'];
+                        Dom.get('sl-fp' + id).innerHTML = vals['fp'];
+                    }
+                }
+            }
+            var attn = '';
+            if (0 && res.IsCurrent) {
+                if (res.Attn > 0) {
+                    attn = '(' + res.Attn + ')';
+                }
+                parent.window.YAHOO.util.Dom.get('gdc-attn').innerHTML = attn;
+                if (res.Attn > 0) {
+                    parent.window.YAHOO.util.Dom.removeClass('gdc-attn', 'v-hidden');
+                } else {
+                    parent.window.YAHOO.util.Dom.addClass('gdc-attn', 'v-hidden');
+                }
+            }
+
+            <?php // bulk element assignment ?>
+            gdcdata.gdcEvalOptionsBulk   = document.getElementById('gdc-eval-options-bulk');
+            gdcdata.gdcRsnsContainerBulk = document.getElementById('gdc-reasons-container-bulk');
+            gdcdata.gdcRsnsDropdownBulk  = document.getElementById('gdc-reason-dropdown-bulk');
+            gdcdata.gdcRsnsNoteBulk      = document.getElementById('gdc-note-bulk');
+            gdcdata.gdcRsnIDBulk         = document.getElementById('gdc-reasonid-bulk');
+
+            if (gdcdata.gdcEvalOptionsBulk !== null && gdcdata.gdcEvalOptionsBulk !== undefined) {
+                gdcdata.gdcEvalOptionsBulk.onclick = function() {
+                    gdcdata.setContainerState(gdcdata.gdcRsnsContainerBulk);
+                    gdcdata.setDropdownReasons(gdcdata.gdcRsnsDropdownBulk);
+                    gdcdata.setNoteState(gdcdata.gdcRsnsDropdownBulk, gdcdata.gdcRsnsNoteBulk);
+                };
+            }
+
+            if (gdcdata.gdcRsnsDropdownBulk !== null && gdcdata.gdcRsnsDropdownBulk !== undefined) {
+                gdcdata.gdcRsnsDropdownBulk.onchange = function() {
+                    gdcdata.setNoteState(gdcdata.gdcRsnsDropdownBulk, gdcdata.gdcRsnsNoteBulk);
+                };
+            }
+
+            if (gdcdata.gdcRsnsNoteBulk !== null && gdcdata.gdcRsnsNoteBulk !== undefined) {
+                Event.addListener('gdc-note-bulk', 'paste', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note-bulk', 'keydown', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note-bulk', 'keyup', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note-bulk', 'change', gdcdata.limitNoteLength);
+            }
+
+            <?php // If one of the gdc boxes is checked disable the mm check boxes and vice versa ?>
+            gdcdata.modifyBulkCheckBoxes = function(mode)
+            {
+                var gdcChk   = document.getElementsByClassName('gdc-res-chk');
+                var mmChk    = document.getElementsByClassName('gdc-mm-res-chk');
+                var gdcCount = 0;
+                var mmCount  = 0;
+
+                var cBoxes = (mode == 'gdc') ? gdcChk   : mmChk;
+                var oBoxes = (mode == 'gdc') ? mmChk    : gdcChk;
+                var cCount = (mode == 'gdc') ? gdcCount : mmCount;
+
+                [].forEach.call(cBoxes, function (el) {
+                    if (el.checked) {
+                        cCount++;
+                    }
+                });
+                if (cCount > 0 && oBoxes) {
+                    [].forEach.call(oBoxes, function (el) {
+                        el.setAttribute("disabled", "true");
+                    });
+                    gdcdata.bulkAdjTypeCurrent = mode;
+                } else if (cCount == 0 && oBoxes) {
+                    [].forEach.call(oBoxes, function (el) {
+                        el.removeAttribute("disabled");
+                    });
+                }
+            };
+
+            <?php // Repositions the bulk adjudication UI ?>
+            gdcdata.positionBulkUI = function(details)
+            {
+                <?php // effectively resets the bulk UI ?>
+                var container = document.getElementById('gdc-reasons-container-bulk');
+                var dropdown  = document.getElementById('gdc-reason-dropdown-bulk');
+                gdcdata.setInitialState(container, dropdown);
+
+                var bulkUI    = document.getElementById('bulk-adjudication-container');
+                var gdcAnchor = document.getElementById('gdc-container-anchor');
+                var mmAnchor  = document.getElementById('mm-container-anchor');
+
+                if (bulkUI !== null && bulkUI !== undefined) {
+                    var ourNode = bulkUI.cloneNode(true);
+                } else {
+                    return;
+                }
+
+                if (gdcdata.bulkAdjTypeCurrent == 'mm' || details.mmChecked.total > 0) {
+                    bulkUI.parentNode.removeChild(bulkUI);
+                    (details.mmChecked.top > details.mmChecked.bottom) ?
+                        gdcAnchor.appendChild(ourNode) :
+                        mmAnchor.appendChild(ourNode);
+                } else if (gdcdata.bulkAdjTypeCurrent == 'gdc' || details.gdcChecked > 0) {
+                    bulkUI.parentNode.removeChild(bulkUI);
+                    gdcAnchor.appendChild(ourNode);
+                } else {
+                    bulkUI.parentNode.removeChild(bulkUI);
+                    gdcAnchor.appendChild(ourNode);
+                }
+            };
+
+            <?php // Sets the bulk adjudication type to either gdc or mm ?>
+            gdcdata.updateBulkUI = function()
+            {
+                <?php // get checkbox details ?>
+                var details = gdcdata.getBulkResultDetails();
+
+                <?php // handle the disabling of checkboxes ?>
+                if (details.gdcChecked > 0) {
+                    gdcdata.modifyBulkCheckBoxes('gdc');
+                } else if (details.mmChecked.total > 0) {
+                    gdcdata.modifyBulkCheckBoxes('mm');
+                } else {
+                    gdcdata.modifyBulkCheckBoxes(gdcdata.bulkAdjTypeCurrent);
+                }
+
+                <?php // if this is the first pass or if the bulkAdjType isn't set select the type for us ?>
+                if (gdcdata.bulkAdjTypeCurrent == '' && details.gdcCount > 0) {
+                    gdcdata.bulkAdjTypeCurrent = 'gdc';
+                } else if (gdcdata.bulkAdjTypeCurrent == '' && (details.mmCount.top > 0
+                    || details.mmCount.bottom > 0)) {
+                    gdcdata.bulkAdjTypeCurrent = 'mm';
+                }
+
+                <?php // handle repositioning the bulk adjudication UI portion ?>
+                if (gdcdata.bulkAdjType != gdcdata.bulkAdjTypeCurrent) {
+                    gdcdata.positionBulkUI(details);
+                    <?php // set up all the reason drop downs once again now that the UI has shifted ?>
+                    gdcdata.opRequest('bulk-reasons', gdcdata.bulkAdjTypeCurrent);
+                }
+
+                gdcdata.bulkAdjType = gdcdata.bulkAdjTypeCurrent;
+            };
+
+            gdcdata.loadAdjudicationReasons(
+                res.Record,
+                res.AdjudicationReasons.match,
+                res.AdjudicationReasons.falsePositive
+            );
+
+            gdcdata.updateBulkUI();
+            break;
+
+        <?php // Update the screening list ?>
+        case 'mm-bulk-update':
+        case 'bulk-update':
+        case 'mm-save-eval':
+        case 'save-eval':
+            if (res.ResultID != 0) {
+                if (op == 'save-eval' || op == 'bulk-update' || op == 'mm-bulk-update') {
+                    gdcdata.opRequest('load-result', res.ResultID, res.ScreeningID);
+                } else if (op == 'mm-save-eval') {
+                    gdcdata.opRequest('mm-load-result', res.ResultID, res.ScreeningID, res.source_recid);
+                }
+            }
+            break;
+
+        case 'load-mm-detail':
+        case 'load-detail':
+            if (res.Result == 0) {
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+                break;
+            }
+            if (res.Mode == 'single') {
+                gdcdata.showSingleRecord(res.Record, res.Flag, res.IsCurrent);
+                gdcdata.setBulkState(false);
+                gdcdata.loadAdjudicationReasons(
+                    res.Record,
+                    res.AdjudicationReasons.match,
+                    res.AdjudicationReasons.falsePositive,
+                    res.AdjudicationReasons.current
+                );
+                gdcdata.setInitialState(gdcdata.gdcRsnsContainer, gdcdata.gdcRsnsDropdown);
+            } else if (res.Mode == 'dual') {
+                gdcdata.setBulkState(false);
+                gdcdata.showDualRecords(res.Record, res.PrevRecord, res.Flag, res.IsCurrent);
+                gdcdata.loadAdjudicationReasons(
+                    res.Record,
+                    res.AdjudicationReasons.match,
+                    res.AdjudicationReasons.falsePositive,
+                    res.AdjudicationReasons.current
+                );
+                gdcdata.setInitialState(gdcdata.gdcRsnsContainer, gdcdata.gdcRsnsDropdown);
+            }
+            if (gdcdata.gdcRsnsNote !== null) {
+                Event.addListener('gdc-note', 'paste', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note', 'keydown', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note', 'keyup', gdcdata.limitNoteLength);
+                Event.addListener('gdc-note', 'change', gdcdata.limitNoteLength);
+            }
+            break;
+
+        case 'alter-show':
+        case 'mm-load-result':
+        case 'load-result':
+            if (res.Result == 1) {
+                var txt = '<hr \>\n<table width="100%" cellspacing="0" cellpadding="3">\n';
+                var i, hit, tbl, onc, iTitle;
+                var nm, clk, statusImg, flagImg, idType;
+                var showFP = res.ShowFP;
+                var showUC = res.ShowUC;
+                var toShow, allFP = 0, allUC = 0;
+                var ttlToShow = 0, shown = 0, mmTtlToShow = 0;
+                for (tbl in res.TableTrans) {
+                    if (!tbl
+                        || !res.Hits
+                        || !res.Hits[tbl]
+                        || res.Hits[tbl].length == 0
+                    ) {
+                        continue;
+                    }
+                    ttlToShow += res.Tallies[tbl]['rvw'];
+                    if (showFP) {
+                        ttlToShow += res.Tallies[tbl]['fp'];
+                    }
+                    if (showUC) {
+                        ttlToShow += res.Tallies[tbl]['uc'];
+                    }
+                }
+                <?php
+                // if the tenant has media monitor count the media monitor hits
+                if ($mmEnabled) {
+                    ?>
+                    if (typeof res.mmReviews == 'object') {
+                        mmTtlToShow += gdcdata.getObjectLength(res.mmReviews);
+                    }
+                    if (typeof res.mmResults == 'object') {
+                        mmTtlToShow += gdcdata.getObjectLength(res.mmResults);
+                    }
+                    <?php
+                }
+                ?>
+                if (ttlToShow > 0 || mmTtlToShow > 0) {
+                    txt += '<tr>\n'
+                        + '  <td colspan="7"><div '
+                        + 'class="marg-top1e fw-bold"><u>SCREENING RESULTS</u> '
+                        + '<em class="note">Click on result to view detail</em></div>';
+                    if (ttlToShow > 0) {
+                        <?php if ($bulkAdjudEnabled) { ?>
+                            txt += '<div style="margin-top:10px;">\n'
+                            + '<a href="javascript:void(0);" onclick="gdcdata.SelectAll(\'gdc\')">'
+                            + 'Check All</a> / <a href="javascript:void(0);" '
+                            + 'onclick="gdcdata.UnselectAll(\'gdc\')">Uncheck All</a> / '
+                            + '<a href="javascript:void(0);" onclick="gdcdata.InvertAll(\'gdc\')">'
+                            + 'Invert All</a></div>\n';
+                        <?php
+                        }
+                        ?>
+                    }
+                       txt += '</td>\n'
+                        + '</tr>\n';
+                } else {
+                    txt += '<tr>\n'
+                        + '  <td><div '
+                        + 'class="marg-top1e fw-bold"><u>SCREENING RESULTS</u></div></td>\n'
+                        + '</tr>\n';
+                }
+                for (tbl in res.TableTrans) {
+                    if (!tbl
+                        || !res.Hits
+                        || !res.Hits[tbl]
+                        || res.Hits[tbl].length === 0
+                    ) {
+                        continue;
+                    }
+
+                    toShow = res.Tallies[tbl]['rvw'];
+                    allFP += res.Tallies[tbl]['fp'];
+                    allUC += res.Tallies[tbl]['uc'];
+                    if (showFP) {
+                        toShow += res.Tallies[tbl]['fp'];
+                    }
+                    if (showUC) {
+                        toShow += res.Tallies[tbl]['uc'];
+                    }
+                    if (toShow == 0) {
+                        continue;
+                    }
+
+                    txt += '<tr>\n'
+                        + '  <td colspan="5"><div class="fw-bold marg-top1e marg-botsm">'
+                        + res.TableTrans[tbl] + '</div></td>\n'
+                        + '</tr>\n';
+
+                    for (i in res.Hits[tbl]) {
+                        if (!tbl
+                            || !res.Hits
+                            || !res.Hits[tbl]
+                            || !res.Hits[tbl][i]
+                        ) {
+                            hit = {ID: null,
+                                flag: null,
+                                status: null,
+                                type: null,
+                                name: null,
+                                ref: null,
+                                reason: null
+                            };
+                        } else {
+                            hit = res.Hits[tbl][i];
+                        }
+
+                        if (hit.flag == 'falsePositive') {
+                            if (showFP == 0) {
+                                continue;
+                            }
+                        } else if (hit.status == 'unchanged' && hit.flag != 'undetermined') {
+                            if (showUC == 0) {
+                                continue;
+                            }
+                        }
+                        idType = (hit.type == 'P') ? 'Person' : 'Entity';
+                        if ((hit.flag == 'undetermined' && hit.status == 'unchanged')
+                            || hit.flag == 'falsePositive'
+                        ) {
+                            statusImg = '<img src="/cms/images/spacer.gif" alt="" />';
+                        } else {
+                            iTitle = res.StatusTrans[hit.status];
+                            statusImg = '<span class="' + res.StatSym[hit.status] + '" style="font-size: 16px;" />';
+                        }
+                        iTitle = res.FlagTrans[hit.flag];
+                        flagImg = '<span class="' + res.FlagSym[hit.flag] + '" style="font-size: 16px;"></span>';
+                        onc = "gdcdata.opRequest('load-detail', '" + tbl + "', '" + hit.ref + "', '"
+                            + encodeURIComponent(hit.reason) + "', '" + hit.reasonID + "', '" + idType + "')";
+                        txt += '<tr class="clk">\n'
+                            <?php if ($bulkAdjudEnabled) { ?>
+                            + ' <td class="ta-cent"><input type="checkbox" name="bulkids[]" class="gdc-res-chk" onclick="gdcdata.updateBulkUI()"'
+                            + ' value="' + hit.ref + ':' + tbl + '" /></td>\n'
+                            <?php
+} else {
+    ?>
+                            + ' <td class="ta-cent">&nbsp;</td>\n'
+                            <?php
+}
+?>
+                            + '  <td class="ta-cent" onclick="' + onc + '">' + statusImg + '</td>\n'
+                            + '  <td class="ta-cent" onclick="' + onc + '">' + hit.ID + '</td>\n'
+                            + '  <td class="ta-cent" onclick="' + onc + '">' + idType + '</td>\n'
+                            + '  <td class="ta-cent" onclick="' + onc + '">' + flagImg + '</td>\n'
+                            + '  <td colspan="2" onclick="' + onc + '">' + hit.name + '</td>\n'
+                            + '</tr>\n';
+                        shown++;
+                    }
+                }
+                var mmtxt = '';
+                <?php // mediaMonReviewLog results
+                if ($mmEnabled) {
+                    ?>
+                    var hasMMReviews = false;
+                    <?php // counts media monitor outstanding results ?>
+                    if (res.mmResults && typeof res.mmResults == 'object') {
+                        shown += gdcdata.getObjectLength(res.mmResults);
+                    }
+
+                    if (res.hasOwnProperty('mmReviews') && gdcdata.getObjectLength(res.mmReviews) > 0) {
+                        <?php // only show MM heading if mmReviews are present and showUC and showFP are on ?>
+                        if (res.mmReviews && (showUC == 1 || showFP == 1)) {
+                            hasMMReviews = true;
+                            shown += gdcdata.getObjectLength(res.mmReviews);
+                            txt += '<tr>\n'
+                                + '  <td colspan="6"><div class="fw-bold marg-top1e marg-botsm mm-res-heading">'
+                                + 'Media Monitor' + '</div>\n';
+
+                            <?php if ($bulkAdjudEnabled) { ?>
+                            txt += '<div style="margin-top:10px;">\n'
+                                + '<a href="javascript:void(0);" onclick="gdcdata.SelectAll(\'mm\')">'
+                                + 'Check All</a> / <a href="javascript:void(0);" '
+                                + 'onclick="gdcdata.UnselectAll(\'mm\')">Uncheck All</a> / '
+                                + '<a href="javascript:void(0);" onclick="gdcdata.InvertAll(\'mm\')">'
+                                + 'Invert All</a></div>\n<br>';
+                            <?php } ?>
+
+                            txt += '</td></tr>\n';
+                        }
+
+                        [].forEach.call(res.mmReviews, function (rev) {
+                            rev.flag = (rev.hasOwnProperty('flag')) ? rev.flag : rev.determination;
+                            rev.status = 'unchanged';
+
+                            if (rev.flag == 'falsePositive' && showFP == 0) {
+                                return;
+                            } else if (rev.status == 'unchanged' && showUC == 0) {
+                                return;
+                            }
+
+                            idType = (rev.idType.toLowerCase() == 'person') ? 'Person' : 'Entity';
+                            var relevance = rev.relevance + '%';
+                            iTitle = res.FlagTrans[rev.determination];
+                            flagImg = '<span class="' + res.FlagSym[rev.determination] + '" style="font-size: 16px;"/>';
+                            if ((rev.flag == 'undetermined' && rev.status == 'unchanged')
+                                || rev.flag == 'falsePositive'
+                            ) {
+                                statusImg = '<img src="/cms/images/spacer.gif" alt="" />';
+                            } else {
+                                iTitle = res.StatusTrans[rev.status];
+                                statusImg = '<span class="' + res.StatSym[rev.status] + '" style="font-size: 16px;" />';
+                            }
+
+                            onc = "gdcdata.opRequest('load-mm-detail', '" + rev.source_recid + "', '"
+                                + encodeURIComponent(rev.reason).replace(/'/g, "\\'") + "', '" + rev.reasonID + "', '" + idType + "')";
+                            var refTxt = (rev.refinement != null && rev.refinement != '') ? '" title="' + rev.refinement : '';
+                            var fmtTitle = rev.title.trim();
+                            mmtxt += '<tr class="clk">\n';
+                            <?php if ($bulkAdjudEnabled) { ?>
+                                mmtxt += '  <td class="ta-cent"><input type="checkbox" data-anchor="top" class="gdc-mm-res-chk" name="bulkids[]" onclick="gdcdata.updateBulkUI()" value="' + rev.source_recid + '" /></td>\n';
+                            <?php } else { ?>
+                                mmtxt += '  <td class="ta-cent">&nbsp;</td>';
+                            <?php } ?>
+                            mmtxt += '  <td class="ta-cent" onclick="' + onc + refTxt +'">' + statusImg + '</td>\n'
+                                + '  <td class="ta-cent" onclick="' + onc + refTxt +'">' + relevance + '</td>\n'
+                                + '  <td class="ta-cent" onclick="' + onc + refTxt +'">' + idType + '</td>\n'
+                                + '  <td class="ta-cent" onclick="' + onc + refTxt +'">' + flagImg + '</td>\n'
+                                + '  <td class="ta-cent" onclick="' + onc + '">' + rev.term + '</td>\n'
+                                + '  <td class="ta-left" title="' + rev.title + '">' + '<a href="' + rev.url + '" target="_blank">' + fmtTitle + '</a></td>\n';
+                            mmtxt += '</tr>\n';
+                        });
+
+                        if (res.Tallies.hasOwnProperty('mm')) {
+                            toShow += res.Tallies['mm']['rvw'];
+                            allFP  += res.Tallies['mm']['fp'];
+                            allUC  += res.Tallies['mm']['uc'];
+                            if (showFP) {
+                                toShow += res.Tallies['mm']['fp'];
+                            }
+                            if (showUC) {
+                                toShow += res.Tallies['mm']['uc'];
+                            }
+                        }
+                    }
+<?php } ?>
+
+                if (shown == 0) {
+                    txt += '<tr><td><div class="marg-top1e marg-botsm">Selected subject has no '
+                        + 'hits needing review at this time.</div></td></tr>\n';
+                }
+                txt += mmtxt += '</table>\n';
+
+                <?php if ($bulkAdjudEnabled) { ?>
+                if (shown > 0) {
+                    txt += '<div id="gdc-container-anchor">\n';
+                    txt += '<div id="bulk-adjudication-container">\n';
+                    txt += '<div style="margin-bottom: 10px;margin-top: 10px;"><strong>\n';
+                    txt += 'Apply Bulk Determination to Selected: </strong></div>\n';
+                    txt += '<div id="gdc-record-eval-bulk">';
+                    txt += '<div id="gdc-eval-options-bulk" data-reason="">';
+                    txt += '<div style="margin-bottom: 5px;">\n';
+                    txt += '<input type="radio" name="bulk_match" value="true" />\n';
+                    txt += '<span class="fas fa-bullseye" style="font-size: 16px;"></span> True Match</div>\n'; <?php //closes true match ?>
+                    txt += '<div style="margin-bottom: 5px;">';
+                    txt += '<input type="radio" name="bulk_match" value="undetermined" id="bulk_match_undetermined" ';
+                    txt += 'checked="checked"/>'
+                    + '<span class="fas fa-question" style="font-size: 16px;"></span>'
+                    + ' Undetermined</div>\n'; <?php // closes undetermined ?>
+                    txt += '<div style="margin-bottom: 10px;">'
+                    + '<input type="radio" name="bulk_match" value="false" />'
+                    + '<span class="fas fa-times-circle" style="font-size: 16px;"></span>'
+                    + ' False Positive</div>\n' <?php // closes false positive ?>
+                    + '</div>' <?php // closes gdc-eval-options-bulk; ?>
+                    + '</div>' <?php // closes gdc-record-eval-bulk; ?>
+                    + '<div id="gdc-reasons-container-bulk">'
+                    +   '<select id="gdc-reason-dropdown-bulk">'
+                    +   '</select><br>'
+                    +   '<input type="hidden" value="" name="gdc-reasonid-bulk" id="gdc-reasonid-bulk">'
+                    +   '<textarea name="gdc-note-bulk" id="gdc-note-bulk" cols="30" rows="10" ' +
+                        'placeholder="Write a note here (Optional)" maxlength="2000"></textarea>'
+                    +   '<p>Characters remaining: <b id="chars-bulk">2000</b></p>'
+                    +    '</div>'; <?php // closes gdc-reasons-container ?>
+
+                    txt += '<div style="margin-bottom: 5px;"><button type="button" '
+                    + 'onclick="gdcdata.showBulkDiag(\'Notice\', \'It is recommended that you '
+                    + 'individually review and set record determination.\');" class="btn btn-light">Apply</button></div>';
+                    txt += '</div>\n'; <?php // closes bulk-adjudication-container ?>
+                    txt += '</div>\n'; <?php // closes gdc-container-anchor ?>
+                }
+<?php
+}
+?>
+                <?php // show/hide links ?>
+                if (allFP > 0 || allUC > 0) {
+                    var oce;
+                    var fpLink = '<a href="javascript:void(0)" ';
+                    var ucLink = '<a href="javascript:void(0)" ';
+                    if (showFP == 0) {
+                        oce = 'onclick="return gdcdata.opRequest(\'alter-show\', 1, '
+                            + showUC + ')"';
+                        fpLink += 'title="Show False Positives" ' + oce
+                            + '>Show False Positives (' + allFP + ')</a>';
+                    } else {
+                        oce = 'onclick="return gdcdata.opRequest(\'alter-show\', 0, '
+                            + showUC + ')"';
+                        fpLink += 'title="Hide False Positives" ' + oce
+                            + '>Hide False Positives (' + allFP + ')</a>';
+                    }
+                    if (showUC == 0) {
+                        oce = 'onclick="return gdcdata.opRequest(\'alter-show\', '
+                            + showFP + ', 1)"';
+                        ucLink += 'title="Show Unchanged" ' + oce
+                            + '>Show Unchanged (' + allUC + ')</a>';
+                    } else {
+                        oce = 'onclick="return gdcdata.opRequest(\'alter-show\', '
+                            + showFP + ', 0)"';
+                        ucLink += 'title="Hide Unchanged" ' + oce
+                            + '>Hide Unchanged (' + allUC + ')</a>';
+                    }
+                    txt += '<hr>\n<table cellpadding="3" cellspacing="0">\n<tr>\n';
+                    if (allFP > 0 && allUC > 0 ) {
+                        txt += '  <td><div style="margin-right:3em">' + ucLink + '</div></td>\n';
+                        txt += '  <td>' + fpLink + '</td>\n';
+                    } else if (allFP > 0) {
+                        txt += '  <td>' + fpLink + '</td>\n';
+                    } else {
+                        txt += '  <td>' + ucLink + '</td>\n';
+                    }
+                    txt += '</tr>\n</table>\n';
+
+                }
+
+
+<?php
+if ($mmEnabled) {
+?>
+                <?php //Media Monitor section; appears after user clicks on a name with hits ?>
+                txt += '<div class="gdc-mm" style="margin-bottom: 10px;margin-top: 10px;">'
+                   + '<h4>Media Monitor Results</h4>';
+                <?php if ($bulkAdjudEnabled) { ?>
+                    if (!hasMMReviews && res.hasOwnProperty('mmResults') && gdcdata.getObjectLength(res.mmResults) > 0) {
+                        txt += '<div style="margin-top:10px;">\n'
+                        + '<a href="javascript:void(0);" onclick="gdcdata.SelectAll(\'mm\')">'
+                        + 'Check All</a> / <a href="javascript:void(0);" '
+                        + 'onclick="gdcdata.UnselectAll(\'mm\')">Uncheck All</a> / '
+                        + '<a href="javascript:void(0);" onclick="gdcdata.InvertAll(\'mm\')">'
+                        + 'Invert All</a></div>\n<br>';
+                    }
+                <?php } ?>
+
+                txt += '<div class="gdc-mm-list-contain">'
+                        + '<div class="gdc-mm-term-outr">'
+                            + '<span>Term: </span>'
+                            + '<span class="gdc-mm-term" data-value=""></span>'
+                            + '<input class="inp-gdc-mm-term" style="visibility: hidden;">'
+                        + '</div>'
+                        + '<div class="gdc-mm-refine-contain" style="float: left; padding: 20px 0;">'
+                            + '<div style="float: left">'
+                                + '<label>Refinement:</label>'
+                                + '<input type="text" class="inp-gdc-mm-refines" style="padding-left: 5px;">'
+                                + '<span class="gdc-mm-refines" data-value></span>'
+                                + '<button class="gdc-mm-search-btn btn">Search</button>'
+                            + '</div>'
+                            + '<div id="waitspinRefinementDiv" style="float: left; margin: 2px 0 0 10px; position: relative;"></div>'
+                            + '<div class="mm-search-msg" style="float: left; padding: 3px 0 0 0;"></div>'
+                        + '</div>'
+                        + '<ul class="gdc-mm-list" style="clear: both;"></ul>'
+                + '</div>'
+                + '<div class="gdc-mm-itm-tpl" style="display:none;">'
+                  + '<li class="gdc-mm-res-itm gdc-li-tpl">'
+                    + '<div>';
+                <?php if ($bulkAdjudEnabled) { ?>
+                    txt += '<input type="checkbox" data-anchor="bottom" class="gdc-mm-res-chk" name="bulkids[]" onclick="gdcdata.updateBulkUI()" />';
+                <?php } ?>
+                    txt += '<div class="gdc-mm-results-wrapper" style="display:inline;">';
+                <?php if (!$bulkAdjudEnabled) { ?>
+                    txt += '<span class="gdc-mm-res-new"></span>';
+                <?php } ?>
+                    txt += '<span class="gdc-mm-res-pct"></span>'
+                        + '<span class="gdc-mm-res-ttl"></span>'
+                      + '<span class="gdc-mm-res-url"></span>'
+                      + '</div>'
+                    + '</div>'
+                    + '</li>'
+                + '</div>'
+                + '</div>';
+
+    <?php if ($bulkAdjudEnabled) { ?>
+        txt += '<div id="mm-container-anchor"></div>\n';
+    <?php } // end check for bulk UI ?>
+<?php } // end Media Monitor feature check ?>
+
+                Dom.get('hit-list').innerHTML = txt;
+
+<?php
+if ($mmEnabled) {
+                ?>
+                gdcdata.mmResults = new gdcdata.MediaMonitorResults('gdc-mm');
+                if (res.mmResults) {
+                    gdcdata.mmResults.newModel(res.mmResults, res.mmSubject);
+                } else {
+                    gdcdata.mmResults.newModel({ }, res.mmSubject);
+                }
+                gdcdata.mmResults.initView();
+
+                <?php
+} // end Media Monitor feature check
+                ?>
+                <?php // reset the bulk adjudication type on new result or refresh ?>
+                gdcdata.bulkAdjTypeCurrent = '';
+                gdcdata.opRequest('update-summary');
+                gdcdata.loadAdjudicationReasons(res.Record, null, null, res.Hits);
+            } else {
+                gdcdata.showResultDiag(res.ErrorTitle, res.ErrorMsg);
+            }
+            break;
+
+        case 'load-help':
+            if (res.Result == 1)
+            {
+                iHelp.loaded.push(o.argument[1]);
+                iHelp.addData(res.HelpObj);
+                iHelp.show(o.argument[1], o.argument[2]);
+            }
+            break;
+
+        case 'listDesc':
+            gdcdata.loadedDesc[gdcdata.loadedDesc.length] = res.listId;
+            iHelp.data[iHelp.data.length] = res.HelpObj;
+            iHelp.toggle(res.listId, o.argument[2]);
+            break;
+
+        case 'fetch-ent':
+            var txt = '';
+            if (res.Result == 1)
+            {
+                txt = '<table bgcolor="#808080" cellpadding="0" '
+                    + 'cellspacing="0"><tr><td><table cellpadding="2" cellspacing="1">';
+                txt += '<tr bgcolor="#d8d8d8">';
+                txt += '<th class="no-wrap">Field Name</th>';
+                txt += '<th class="no-wrap">Field Value</th>';
+                txt += '</tr>\n';
+                var f, v, fld, val;
+                for (f in res.Entity)
+                {
+                    v = res.Entity[f];
+                    if (v == null)
+                        continue;
+                    if (f.substr(0,4) == 'sdf_')
+                    {
+                        fld = f.substr(4);
+                        if (fld == 'DirectID') {
+                            v = '<a href="' + v + '" target="_blank" '
+                                + 'title="More information">World Compliance Link</a>';
+                        }
+                    }
+                    else {
+                        fld = f;
+                    }
+                    txt += '<tr>';
+                    txt += '<td bgcolor="#f0f0f0" class="no-wrap">' + fld + '</td>';
+                    txt += '<td bgcolor="#ffffff">' + v + '</td>';
+                    txt += '</tr>\n';
+                }
+                txt += '</table></td></tr></table>';
+            } else {
+                txt = '<b>' + res.ErrTitle + '</b>\n';
+                txt += '<div class="marg-top1e">' + res.ErrMessage + '</div>';
+            }
+            Dom.get('ent-detail').innerHTML = txt;
+            break;
+
+        case 'ws-request':
+            var txt, ln, i, mi, ei, m, e, bg, rowspan, skip, rcnt = 0;
+            if (res.Result == 1) {
+                txt = '<b>Webservice Result</b>\n';
+                txt += '<div class="marg-top1e" style="margin-left:.5em"><table '
+                    + 'cellpadding="2" cellspacing="0">';
+                txt += '<tr><td class="no-wrap">Search Text:</td><td>'
+                    + res.SearchText + '</td></tr>\n';
+                txt += '<tr><td class="no-wrap">Total Matches:</td><td>'
+                    + res.Parsed.Results.TM + '</td></tr>\n';
+                txt += '<tr><td class="no-wrap">Total Entities:</td><td>'
+                    + res.Parsed.Results.TE + '</td></tr>\n';
+                txt += '<tr><td class="no-wrap">Serial Length:</td><td>'
+                    + res.SerialLen + '</td></tr>\n';
+                txt += '</table></div>';
+            } else {
+                txt = '<b>' + res.ErrTitle + '</b>\n';
+                txt += '<div class="marg-top1e">' + res.ErrMessage + '</div>';
+            }
+            Dom.get('result-sum').innerHTML = txt;
+
+            if (res.Result == 1 && res.Parsed.Results.TM > 0) {
+                txt = '<table cellpacing="0" cellpadding="0"><tr><td valign="top">'
+                    + '<div style="width:430px"><table bgcolor="#808080" cellpadding="0" '
+                    + 'cellspacing="0"><tr><td><table cellpadding="2" cellspacing="1">';
+                txt += '<tr bgcolor="#d8d8d8">';
+                txt += '<th class="ta-cent">Source</th>';
+                txt += '<th class="ta-cent no-wrap">Matching Text</th>';
+                txt += '<th class="ta-cent no-wrap">List ID</th>';
+                txt += '<th class="ta-cent no-wrap">Entity ID</th>';
+                txt += '<th class="ta-cent">Name</th>';
+                txt += '</tr>\n';
+                rcnt = 0;
+                for (mi in res.Parsed.M)
+                {
+                    m = res.Parsed.M[mi];
+                    rowspan = m.E.length;
+                    skip = false;
+                    for (ei in m.E)
+                    {
+                        bg = (rcnt & 1) ? '#f0f0f0': '#ffffff';
+                        e = m.E[ei];
+                        txt += '<tr bgcolor="' + bg + '">';
+                        if (rowspan > 1)
+                        {
+                            if (!skip)
+                            {
+                                txt += '<td valign="top" rowspan="' + rowspan
+                                    + '" class="ta-cent">' + m.MT + '</td>';
+                                txt += '<td valign="top" rowspan="' + rowspan
+                                    + '" >' + m.SD + '</td>';
+                                skip = true;
+                            }
+                        }
+                        else
+                        {
+                            txt += '<td class="ta-cent">' + m.MT + '</td>';
+                            txt += '<td>' + m.SD + '</td>';
+                        }
+                        txt += '<td class="ta-cent"><a href="javascript:void(0)" '
+                            + 'onclick="gdcdata.listDesc(this,' + e.lid + ')" '
+                            + 'title="List Description">' + e.lid + '</a></td>';
+                        txt += '<td><a href="javascript:void(0)" '
+                            + 'onclick="gdcdata.opRequest(\'fetch-ent\', \''
+                            + m.MT + '\', \'' + e.id + '\', \'' + e.ver + '\')" '
+                            + 'title="Click to view details">' + e.id + '</a></td>';
+                        if (res.Depth == 'full')
+                            txt += '<td>' + e.name + '</td>';
+                        else
+                            txt += '<td>' +  res.Names[e.id + '_' + e.ver] + '</td>';
+                        txt += '</tr>\n';
+                    }
+                    rcnt++;
+                }
+                txt += '</table></td></tr></table></div></td>\n';
+                txt += '<td valign="top"><div id="ent-detail" style="margin-left:20px">'
+                    + '</div></td></tr></table>';
+                Dom.get('ws-result').innerHTML = txt;
+            }
+
+
+            if (res.Debug > 0)
+            {
+                txt = '';
+                if ((res.Debug & 1) == 1)
+                {
+                    txt += '<hr><b>XML Request</b>';
+                    txt += '<div class="marg-top1e">' + res.XmlReq + '</div>';
+                }
+                if ((res.Debug & 2) == 2)
+                {
+                    txt += '<hr><b>SOAP Envelope</b>';
+                    txt += '<div class="marg-top1e">' + res.SoapEnv + '</div>';
+                }
+                if ((res.Debug & 4) == 4)
+                {
+                    txt += '<hr><b>Request</b>';
+                    txt += '<div class="marg-top1e">' + res.Request + '</div>';
+                }
+                if ((res.Debug & 8) == 8)
+                {
+                    txt += '<hr><b>Raw Response</b>';
+                    txt += '<div class="marg-top1e">' + res.RawRes + '</div>';
+                }
+                if ((res.Debug & 16) == 16)
+                {
+                    txt += '<hr><b>Full Response</b>';
+                    txt += '<div class="marg-top1e">' + res.FullRes + '</div>';
+                }
+                if ((res.Debug & 32) == 32)
+                {
+                    txt += '<hr><b>Simple Response</b>';
+                    txt += '<div class="marg-top1e">' + res.SimRes + '</div>';
+                }
+                if ((res.Debug & 64) == 64)
+                {
+                    txt += '<hr><b>Socket Error</b>';
+                    if (res.SockErr == '') {
+                        txt += '<div class="marg-top1e">(none)</div>';
+                    } else {
+                        txt += '<div class="marg-top1e">' + res.SockErr + '</div>';
+                    }
+                }
+                Dom.get('dbg-values').innerHTML = txt;
+            }
+
+            break;
+        }
+    };
+
+    var sUrl = '<?php echo $sitepath; ?>case/gdc-ws.sec';
+    var callback = {
+        success: handleOperation,
+        failure: function(o){
+<?php
+if ($_SESSION['userType'] > CLIENT_ADMIN) {
+    ?>
+            alert("Failed connecting to " + sUrl);
+    <?php
+} else {
+    ?>
+            var a = 1; <?php // do nothing ?>
+<?php
+} ?>
+        },
+        argument: [op, arg1, arg2, arg3, arg4],
+        cache: false
+    };
+    var request = YAHOO.util.Connect.asyncRequest('POST', sUrl, callback, postData);
+    return false; <?php // cancel href action ?>
+};
+
+})();
+
+</script>
+
+<div id="ifrbody">
+<div id="gdc-case-info"><table width="98%"
+cellpadding="0" cellspacing="0">
+<tr>
+    <td width="78" valign="top"><?php echo $caseFolderImage; ?></td>
+    <td valign="top"><?php echo $caseSummaryInfo; ?></td>
+    <td valign="top" align="right">
+        <span><a href="javascript:void(0)"
+            onclick="parent.window.YAHOO.gdcifr.closePanel()"><span class="fas fa-save"></span><br />Save</a></span>
+    </td>
+</tr>
+</table></div>
+<div id="subdemo"></div>
+</div>
+
+<div id="iHelpPanel" class="disp-none">
+  <div class="hd"></div>
+  <div class="bd"></div>
+  <div class="ft"></div>
+</div>
+
+<div id="gdc-review-log" class="disp-none">
+  <div class="hd"><div class="panelFormTitle">Screening Review Log</div></div>
+  <div class="bd"><div id="gdc-review-log-content"></div></div>
+  <div class="ft"></div>
+</div>
+
+<div id="gdc-detail-view" class="disp-none">
+  <div class="hd"><div id="panelFormTitle" class="panelFormTitle">Source Record Detail from Global Database
+    Check</div></div>
+  <div class="bd">
+    <div id="gdc-detail-all">
+      <div id="gdc-detail-btns"><table width="400" cellpadding="3" cellspacing="0"><tr>
+        <td>
+            <table id="gdc-record-eval" cellspacing="3" cellpadding="0">
+            <tbody>
+            <tr>
+              <td>
+                  <label for="gdc-eval-match"><span class="fas fa-bullseye" style="font-size: 16px;"></span></label>
+              </td>
+              <td>
+            <label for="gdc-eval-undetermined"><span class="fas fa-question" style="font-size: 16px;"></span></label>
+              </td><td>
+            <label for="gdc-eval-falsePositive"><span class="fas fa-times-circle" style="font-size: 16px;"></span></label>
+              </td>
+            </tr>
+            <tr id="gdc-eval-options">
+              <td>
+            <input id="gdc-eval-match" name="gdc-eval" type="radio"
+              value="match" title="True Match" />
+              </td>
+              <td>
+            <input id="gdc-eval-undetermined" name="gdc-eval" type="radio"
+              value="undetermined" title="Undetermined" />
+              </td>
+              <td>
+            <input id="gdc-eval-falsePositive" name="gdc-eval" type="radio"
+              value="falsePositive" title="False Positive" />
+              </td>
+            </tr>
+            </tbody>
+            </table>
+        </td>
+        <td width="55"><div id="gdc-view-log-link" class="ta-cent"><a
+            href="javascript:void(0)"
+            onclick="gdcdata.opRequest('review-log')" id="gdc-review-link">View<br />Log</a></div></td>
+        <td width="140" align="right" class="no-wrap">
+          <button id="gdc-detail-update-btn" class="btn">Update</button>
+          <button id="gdc-detail-cancel-btn" class="btn">Cancel</button></td>
+      </tr></table></div>
+      <hr />
+        <div id="gdc-reasons-container">
+            <select id="gdc-reason-dropdown">
+            </select><br>
+            <input type="hidden" value="" name="gdc-reasonid" id="gdc-reasonid">
+            <textarea name="gdc-note" id="gdc-note" cols="30" rows="10"
+            placeholder="Write a note here (Optional)" maxlength="2000">
+            </textarea>
+            <p>Characters remaining: <b id="chars-single">2000</b></p>
+        </div>
+      <div id="gdc-detail"></div>
+    </div>
+  </div>
+  <div class="ft"></div>
+</div>
+<div id="mm-contain" class="mm-contain"></div>
+
+<?php
+noShellFoot(true);

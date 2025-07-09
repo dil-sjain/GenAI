@@ -1,0 +1,1131 @@
+<?php
+/**
+ * List review case conditions with notes
+ */
+
+require_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+require_once __DIR__ . '/../../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCaseLog') || $session->secure_value('userClass') == 'vendor') {
+    if (isset($toPDF) && $toPDF) {
+        echo 'Access denied.';
+        return;
+    } else {
+        exit('Access denied.');
+    }
+}
+
+require_once __DIR__ . '/../../includes/php/'.'funcs_cases.php';
+
+// Validate access and assign $clientID, $caseID and $caseRow
+if (!isset($_SESSION['currentCaseID'])
+    || !($caseID = $_SESSION['currentCaseID'])
+    || !($clientID = $_SESSION['clientID'])
+    || !($caseRow = fGetCaseRow($caseID))
+) {
+    return;
+}
+
+if (!isset($toPDF)) {
+    $toPDF = false;
+}
+$canAddNote = ($_SESSION['userSecLevel'] > READ_ONLY
+    && !$toPDF && $accCls->allow('addCaseNote')
+);
+
+require_once __DIR__ . '/../../includes/php/'.'class_db.php';
+$e_clientID = $clientID;
+
+$helpData = [];
+
+$noteCats = $dbCls->fetchKeyValueRows("SELECT id, name "
+    . "FROM noteCategory WHERE clientID='$e_clientID' AND id > 0 ORDER BY name ASC"
+);
+
+if (!is_array($noteCats) || !count($noteCats)) {
+    $newrec = 0;
+    $newname = 'General Information';
+    if ($dbCls->query("INSERT INTO noteCategory SET clientID='$e_clientID', "
+        . "name='$newname'"
+    ) && ($newrec = $dbCls->insert_id())) {
+        $noteCats = [$newrec => $newname];
+    }
+}
+$noteCatOptions = '';
+foreach ($noteCats AS $i => $n) {
+    $noteCatOptions .= "<option value=\"$i\">$n</option>\n";
+}
+
+$revVars = ['clientID'  => $clientID, 'caseID'    => $caseID, 'b3pAccess' => $_SESSION['b3pAccess'], 'b3pRisk'   => $_SESSION['b3pRisk'], 'caseRow'   => $caseRow, 'userClass' => $session->secure_value('userClass')];
+require_once __DIR__ . '/../../includes/php/'.'class_casereview.php';
+$reviewCls = new CaseReview($revVars, $toPDF);
+unset($revVars);
+$scopeDeviation = $reviewCls->getScopeDeviation();
+$shouldShowR4 = $reviewCls->shouldShowR4($caseID);
+$loginpath = LOGIN_URL;
+require_once __DIR__ . '/../../includes/php/'.'funcs_misc.php';
+
+?>
+
+<script type="text/javascript">
+
+(function(){
+
+YAHOO.namespace('crevtab');
+var Dom = YAHOO.util.Dom,
+    Event = YAHOO.util.Event,
+    crevtab = YAHOO.crevtab;
+
+var revActiveTR = '';
+crevtab.showCompare = function(tr_id) {
+    if (!crevtab.active) {
+        return;
+    }
+    if (revActiveTR != tr_id) {
+        revActiveTR = tr_id;
+        Dom.removeClass(tr_id, 'disp-none');
+    } else {
+        revActiveTR = '';
+        Dom.addClass(tr_id, 'disp-none');
+    }
+    Dom.getElementsBy(function(e) {
+            var el = Dom.get(e.id);
+            if (el != null && el.id != tr_id && el.id.length > 3
+                & el.id.substr(0, 3) == 'r4_' ) {
+                Dom.addClass(el.id, 'disp-none');
+            }
+            return false;
+        }, 'tr', 'idRevContainer'
+    );
+    return false;
+};
+
+crevtab.qID = '';
+crevtab.section = '';
+crevtab.showNote = function(qID, nSect) {
+    if (!crevtab.active) {
+        return;
+    }
+    crevtab.qID = qID;
+    crevtab.section = nSect;
+    crevtab.setNoteList('show');
+};
+})();
+
+</script>
+
+<?php
+// Format the reviewer headings
+
+$r1Heading = <<<EOT
+<tr class="reviewSectHead">
+    <th class="c1"><a name="revscope"></a><img src="{$loginpath}/assets/image/r1.png" alt="" />
+        Deviated from Recommended Scope of Due Diligence</th>
+    <th class="c2">Recommended</th>
+    <th class="c3">Changed to</th>
+    <th class="c4"><div>Status</div><br class="clearfloat" /></th>
+</tr>
+EOT;
+
+$r2Heading = <<<EOT
+<tr class="reviewSectHead">
+    <th class="c1"><a name="revredflag"></a><img src="{$loginpath}/assets/image/r2.png" alt="" />
+        Potential Red Flag(s) Identified During Due Diligence</th>
+    <th class="c2">&nbsp;</th>
+    <th class="c3">&nbsp;</th>
+    <th class="c4">&nbsp;</th>
+</tr>
+EOT;
+
+$r3Heading = <<<EOT
+<tr class="reviewSectHead">
+    <th class="c1"><a name="revresponse"></a><img src="{$loginpath}/assets/image/r3.png" alt="" />
+        Unexpected Response(s) Provided by Third Party on Intake Questionnaire</th>
+    <th class="c2">Expected Response</th>
+    <th class="c3">Actual Response</th>
+    <th class="c4">&nbsp;</th>
+</tr>
+EOT;
+
+if ($shouldShowR4) {
+    $r4Heading = <<<EOT
+    <tr class="reviewSectHead">
+        <th class="c1"><a name="revcompare"></a><img src="{$sitepath}images/r4.png" alt="" />
+            Response(s) for review from Renewal Questionnaire</th>
+        <th class="c2">Previous Response</th>
+        <th class="c3">New Response</th>
+        <th class="c4">&nbsp;</th>
+    </tr>
+EOT;
+} else {
+    $r4Heading ='';
+}
+$padRow = <<<EOT
+<tr><td colspan="4">&nbsp;</td></tr>
+EOT;
+
+$blankImg = '<img src="' . $loginpath . '/assets/image/spacer.gif" width="20" height="16"  alt="" />';
+
+// R1 - Scope Deviation (R1)
+
+if ($scopeDeviation->differs) {
+    $noteLink = $reviewCls->mkNoteLink('scope', 'rScope');
+    $statusLink = $reviewCls->mkStatusLink('scope', 'rScope', 'R1');
+    $scopeHTML = <<<EOT
+<tr class="paddedRow2">
+  <td><div class="reviewIndentScope">
+      <table class="innerReviewTbl" cellpadding="3" cellspacing="0">
+      <tr>
+        <td class="flex-fit">Changed by:</td>
+        <td>$scopeDeviation->convertedBy</td>
+      </tr><tr>
+        <td class="flex-fit va-top">User explanation:</td>
+        <td class="va-top">$scopeDeviation->explain</td>
+      </tr>
+      </table></div></td>
+  <td class="ta-cent">$scopeDeviation->recommended</td>
+  <td class="ta-cent">$scopeDeviation->selected</td>
+  <td>{$blankImg}$noteLink{$statusLink}<br class="clearfloat" /></td>
+</tr>
+EOT;
+
+} else {
+    $msg = 'Nothing to review in regard to scope of due diligence';
+    if (!$scopeDeviation->completed) {
+        $msg = 'Due diligence not completed';
+    } elseif (!$scopeDeviation->applies) {
+        $msg = 'Recommendation not available';
+    } elseif ($scopeDeviation->applies && !$scopeDeviation->differs) {
+        $msg = 'No deviation; nothing to review';
+    }
+
+    $scopeHTML = <<<EOT
+<tr class="paddedRow2">
+  <td class="reviewIndentContent" colspan="4">$msg</td>
+</tr>
+
+EOT;
+
+}
+
+// R2 - Red Flags
+$listItems = false;
+if (!$scopeDeviation->completed) {
+    $rfHTML = '<tr class="paddedRow">'
+        . '<td class="reviewIndentContent" colspan="4">'
+        . 'Due diligence not completed</td></tr>';
+} else {
+    $redFlags = $reviewCls->getRedFlags();
+    if (is_array($redFlags->exFlags) && count($redFlags->exFlags)) {
+        $listItems = true;
+    } elseif ($redFlags->rfYesNo == 'Yes') {
+        $listItems = true;
+        $redFlags->exFlags[] = (object)['id' => 'Yes', 'name' => 'Yes, potential red flags are indicated.', 'howMany' => 0];
+    } else {
+        $rfHTML = '<tr class="reviewIndentContent paddedRow">'
+            . '<td class="reviewIndentContent" colspan="4">None indicated</td></tr>';
+    }
+}
+if ($listItems) {
+    $rfHTML = '';
+    foreach ($redFlags->exFlags AS $flag) {
+        $noteLink = $reviewCls->mkNoteLink($flag->id, 'rRedFlag');
+        $statusLink = $reviewCls->mkStatusLink($flag->id, 'rRedFlag', "R2-".$flag->id);
+        $name = $flag->name;
+        if ($redFlags->showNumbers && $flag->howMany >= 1) {
+            $name .= " ($flag->howMany)";
+        }
+        $itemID = '&ensp;<span class="no-wrap">[R2-' . $flag->id . ']</span>';
+        $rfHTML .= <<<EOT
+<tr class="paddedRow">
+    <td class="reviewIndentContent" colspan="3">$name $itemID</td>
+    <td>{$blankImg}$noteLink{$statusLink}<br class="clearfloat" /></td>
+</tr>
+
+EOT;
+
+    }
+}
+
+
+// R3 - Unexpected Answers
+$YNres = $reviewCls->getUnexpectedResponses();
+$msg = $YNresHTML = '';
+if (!$YNres->hasDDQ) {
+    $msg = 'No due diligence intake form has been submitted.';
+} elseif (!$YNres->qualifiedYN) {
+    $msg = 'Intake form has no qualified questions for comparison';
+} elseif (!$YNres->found) {
+    $msg = 'No differences; nothing to review';
+}
+if ($msg) {
+    $YNresHTML = '<tr class="paddedRow">'
+        . '<td class="reviewIndentContent" colspan="4">' . $msg . '</td></tr>';
+} else {
+    // show them
+    $na = "<em>unanswered</em>";
+    foreach ($YNres->pgTabs as $tabName => $tabInfo) {
+        if (!count($tabInfo['unexpected'])) {
+            continue;
+        }
+        $abbr = $tabInfo['abbr'];
+        // new subsection
+        $sect = '[' . $abbr . '] ' . $tabName;
+        $unexpectedResponse = '';
+
+        foreach ($tabInfo['unexpected'] as $qID => $yn) {
+            if ($yn->response == '') {
+                continue;
+            }
+            if ($yn->reviewerContext != '') {
+                $helpData[] = "{id: 'rQuestion_{$qID}', width: $yn->helpWidth, "
+                    . "title: '', msg: '$yn->reviewerContext'}";
+            }
+            $expected = ($yn->expected == '') ? $na: $yn->expected;
+            $response = ($yn->response == '') ? $na: $yn->response;
+            $moreInfo = ($yn->reviewerContext == '') ? '': '&emsp;<a '
+                . 'onclick="iHelp.toggle(\'rQuestion_'.$qID.'\',this)" href="javascript:void(0)" '
+                . 'class="no-wrap" style="font-style: italic">See Reference...</a>';
+            $noteLink = $reviewCls->mkNoteLink($qID, 'rQuestion');
+            $statusLink = $reviewCls->mkStatusLink($qID, 'rQuestion',
+                "R3-".$abbr."-".$yn->dataIndex
+            );
+            $itemID = '&ensp;<span class="no-wrap">[R3-' . $abbr . "-".$yn->dataIndex . "]</span>";
+            $unexpectedResponse .= <<<EOT
+<tr class="paddedRow">
+    <td class="reviewIndentContent">$yn->labelText $itemID $moreInfo</td>
+    <td class="ta-cent">$expected</td>
+    <td class="ta-cent">$response</td>
+    <td>{$blankImg}$noteLink{$statusLink}<br class="clearfloat" /></td>
+</tr>
+EOT;
+        }
+
+        if (!empty($unexpectedResponse)) {
+            $YNresHTML .= '<tr class="paddedRow2">'
+                . '<td class="subsectionHead reviewIndentContent" colspan="4">'
+                . '<span>' . $sect . '</span></td></tr>' . $unexpectedResponse;
+        } else {
+            $YNresHTML .= '<tr class="paddedRow">'
+                . '<td class="reviewIndentContent" colspan="4"> No unexpected responses</td></tr>';
+        }
+    }
+}
+
+if ($shouldShowR4) {
+
+    // R4 - Renewal Comparison
+    $ddqDiff = $reviewCls->getDdqDiff();
+    $msg = $cmpHTML = '';
+    if (!$ddqDiff->canCompare) {
+        $msg = 'No comparison is available.';
+    } elseif (!count($ddqDiff->compare)) {
+        $msg = 'No differences; nothing to review';
+    }
+
+    if ($msg) {
+        $cmpHTML = '<tr class="paddedRow">'
+            . '<td class="reviewIndentContent" colspan="4">' . $msg . '</td></tr>';
+    } else {
+        // show them
+        $abbr = '';
+        $na = "<em>unanswered</em>";
+        foreach ($ddqDiff->compare as $cmp) {
+            $qID = $cmp->questionID;
+            if ($cmp->reviewerContext != '') {
+                $helpData[] = "{id: 'rReview_{$qID}', width: $cmp->helpWidth, "
+                    . "title: '', msg: '$cmp->reviewerContext'}";
+            }
+
+            if ($abbr != $cmp->abbr) {
+                // new subsection
+                $abbr = $cmp->abbr;
+                $sect = "[$abbr] $cmp->pageTab";
+                $cmpHTML .= '<tr class="paddedRow2">'
+                    . '<td class="subsectionHead reviewIndentContent" colspan="4">'
+                    . '<span>' . $sect . '</span></td></tr>';
+            }
+
+            $moreInfo = ($cmp->reviewerContext == '') ? '': '&emsp;<a '
+                . 'onclick="iHelp.toggle(\'rReview_'.$qID.'\',this)" href="javascript:void(0)" '
+                . 'class="no-wrap img-link" style="font-style: italic">See Reference...</a>';
+            $noteLink = $reviewCls->mkNoteLink($qID, 'rReview');
+            $statusLink = $reviewCls->mkStatusLink($qID, 'rReview', "R4-".$abbr."-".$cmp->dataIndex);
+            $formatted = $reviewCls->formatDDqDiffResponses($cmp);
+            $itemID = '&ensp;<span class="no-wrap">[R4-' . $abbr . "-" . $cmp->dataIndex . "]</span>";
+            $cmpHTML .= <<<EOT
+    <tr class="paddedRow">
+        <td class="reviewIndentContent">$cmp->labelText $itemID $moreInfo</td>
+        <td class="ta-cent">$formatted->previousPreview</td>
+        <td class="ta-cent">$formatted->newPreview</td>
+        <td>{$formatted->expandImg}$noteLink{$statusLink}<br class="clearfloat" /></td>
+    </tr>
+EOT;
+            if ($cmp->expand) {
+                $hideRow = (!$toPDF) ? ' class="disp-none"': '';
+                $cmpHTML .= <<<EOT
+    <tr id="r4_{$qID}" $hideRow>
+      <td colspan="3"><div
+        class="reviewIndentContent">
+        <div class="comparisonPanel">
+        <div class="closeExpandableRow"><a title="Close Expanded Response"
+          onclick="YAHOO.crevtab.showCompare('r4_{$qID}');"
+          title="Close Expanded Response"><img src="{$sitepath}images/expanded_close.png"
+          alt="Close Expanded Response" /></a></div>
+        <div class="responseContainer previousResponseContainer"><span>Previous
+          Response</span>$formatted->previousFull</div>
+        <div class="responseContainer newResponseContainer"><span>New
+          Response</span>$formatted->newFull</div>
+        <br class="clearfloat" /></div></td>
+      <td></td>
+    </tr>
+EOT;
+
+            }
+        }
+    }
+
+} else {
+        $cmpHTML = '';
+}
+
+// Links above table
+// These will be replaced with filter links
+// All (#) | NeedsReviewed (#) | Reviewed (#)
+
+/*
+if (!$toPDF) {
+    echo <<<EOT
+
+<div class="marg-top1e fw-bold ta-cent">
+<a name="top"></a>
+<a href="#revscope">Scope</a>
+| <a href="#revredflag">Red Flags</a>
+| <a href="#revresponse">Unexpected Responses</a>
+| <a href="#revcompare">Previous Comparison</a>
+</div>
+
+EOT;
+
+}
+ */
+
+$jsHelpData = join(",\n", $helpData);
+
+?>
+
+<script type="text/javascript">
+(function(){
+    var tmphelp = [<?php echo $jsHelpData;?>];
+    var i;
+    if (tmphelp.length) {
+        for (i in tmphelp) {
+            iHelp.addData(tmphelp[i]);
+        }
+    }
+})();
+</script>
+
+
+<?php
+// Output reviewer table
+
+echo <<<EOT
+
+<div class="marg-top1e" id="idRevContainer">
+<table width="100%" cellspacing="0" cellpadding="3">
+
+$padRow
+$r1Heading
+$scopeHTML
+
+$padRow
+$r2Heading
+$rfHTML
+
+$padRow
+$r3Heading
+$YNresHTML
+
+$padRow
+$r4Heading
+$cmpHTML
+$padRow
+
+</table>
+</div>
+
+EOT;
+
+if (!$toPDF) {
+    ?>
+
+    <div id="crev-reviewer-notes"></div>
+
+    <?php
+    if ($canAddNote) {
+        // Form for entering/updating a note
+        ?>
+        <div id="crev-note-frm" class="disp-none">
+            <div class="hd"><div class="panelFormTitle">Enter Reviewer Note</div></div>
+            <div class="bd">
+        <table cellpadding="0" cellspacing="0"><tr><td><div style="padding:8px;">
+
+        <form action="/cms/casehome.sec" method="post" onsubmit="return false;">
+        <table cellspacing="0" cellpadding="4">
+        <tr>
+            <td><div class="fw-normal">Category:</div></td>
+            <td><select class="cudat-medium" id="crev_note_category"
+                name="crev_note_category"><?php echo $noteCatOptions; ?></select></td>
+        </tr>
+        <tr>
+            <td><div class="fw-normal">Subject:</div></td>
+            <td><input class="cudat-medium" type="text" maxlength="255" id="crev_note_subject"
+                name="crev_note_subject" value="" /></td>
+        </tr>
+        <tr>
+            <td valign="top"><div class="fw-normal"
+                style="white-space:nowrap; padding-top:3px;">Enter note:</div></td>
+            <td><textarea name="crev_note" id="crev_note" wrap="soft"
+                class="cudat-xlarge cudat-normal-h marg-rt0" cols="15" rows="5"
+                onchange="YAHOO.crevtab.limitNoteLength(this)"
+                onkeydown="YAHOO.crevtab.limitNoteLength(this)"
+                onkeyup="YAHOO.crevtab.limitNoteLength(this)"></textarea></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>Characters remaining:<span id="crev_notechars" class="fw-bold"
+                style="padding-left:.5em;">2000</span></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td align="right"><button class="v-hidden btn" id="crev-save-note-btn">Save</button>
+                <button class="v-hidden marg-rt0 btn" id="crev-close-note-btn"
+                onclick="YAHOO.crevtab.setNoteForm('hide');">Close</button></td>
+        </tr>
+        <tr>
+            <td colspan="2"><div class="fw-normal ta-cent" style="padding-top:.5em"><span
+                style="padding-right:.5em"><b>Notice:</b></span> Within 30 minutes of
+                saving a note, you may edit or delete it.<br />
+                Afterwards, it becomes a permanent part of this case folder.</div></td>
+        </tr>
+        </table>
+        </form>
+        </div></td></tr></table>
+
+        </div>
+        <div class="ft"></div>
+        </div>
+
+<?php
+    }
+
+    // Panel to show full note detail. When appropriate, shows Edit/Delete buttons
+    ?>
+    <div id="crev-note-view" class="disp-none">
+        <div class="hd"><div class="panelFormTitle"
+            id="crev-note-view-title">Reviewer Note</div></div>
+        <div class="bd">
+
+    <table width="430" cellpadding="0" cellspacing="0">
+    <tr>
+        <td>
+
+    <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+        <td valign="top"><div class="marg-rtsm fw-bold"
+            style="padding-bottom:5px;">Subject:</div></td>
+        <td valign="top" width="100%"><div id="crev-note-prev-subj">&nbsp;</div></td>
+    </tr>
+    <tr>
+        <td valign="top"><div class="marg-rtsm-nobr fw-bold"
+            style="padding-bottom:5px;">Date / Time:</div></td>
+        <td valign="top"><div id="crev-note-prev-time"></div></td>
+    </tr>
+    <tr>
+        <td valign="top"><div class="marg-rtsm fw-bold"
+            style="padding-bottom:5px;">Category:</div></td>
+        <td valign="top"><div id="crev-note-prev-cat"></div></td>
+    </tr>
+    <tr>
+        <td valign="top"><div class="marg-rtsm fw-bold"
+            style="padding-bottom:5px;">Owner:</div></td>
+        <td valign="top"><div id="crev-note-prev-owner"></div></td>
+    </tr>
+    </table>
+
+    <?php
+    $longStyle = 'width:430px;margin:.5em 0 1em 0;padding:5px 0 6px 0; '
+        . 'border-top:1px solid #ccc;border-bottom:1px solid #ccc;height:0;overflow:hidden;';
+    ?>
+
+    <div id="crev-note-show" style="<?php echo $longStyle; ?>"></div>
+
+    <div style="width:430px;"><table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td>
+    <?php
+    if ($canAddNote) {
+        ?>
+            <span id="crev-vis-delredo-note-btn" class="v-hidden"
+            style="white-space:nowrap;"><button id="crev-note-del-btn"
+            class="v-hidden btn">Delete</button> <button id="crev-note-ed-btn"
+            class="v-hidden btn">Edit</button></span>
+        <?php
+    } ?></td>
+        <td width="100%"><span id="crev-note-until-when"
+            style="display:inline-block;padding-left:.5em;"></span></td>
+        <td align="right"><button id="crev-note-view-close-btn" class="v-hidden btn">Close</button></td>
+    </tr></table></div>
+
+        </td>
+    </tr>
+    </table>
+
+    </div>
+    <div class="ft"></div>
+    </div>
+
+
+    <div id="crev-notes-list" class="disp-none">
+    <div class="hd"><div class="panelFormTitle" id="crev-note-list-title">Case
+        Review Notes</div></div>
+    <div class="bd">
+    <div style="padding:7px;">
+    <!-- Begin tab content -->
+
+    <div style="margin:1em 0;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+        <td valign="top" class="fw-normal"><i>Reviewer Notes are auditable and become a permanent
+            record in this case review.</i></td>
+        <td class="ta-right"><?php
+    if ($canAddNote) {
+        ?>
+        <button id="crev-add-note-btn" class="btn">Add New</button>
+        <?php
+    } ?></td>
+    </tr>
+    </table>
+    </div>
+            <div id="crev-dtNotesNav" class="margin-topsm"></div>
+            <div id="crev-dtNotesDiv"></div>
+        </div></div>
+        <div class="ft"></div>
+    </div>
+
+    <script type="text/javascript">
+
+    (function() {
+
+    var Dom = YAHOO.util.Dom;
+    var crevtab = YAHOO.crevtab;
+
+    crevtab.dtNotesList = null;
+    crevtab.canAddNote = false;
+    crevtab.noteRedoID = 0;
+    crevtab.noteEditSig = '';
+
+    var noteListPanel = null;
+    var noteFormPanel = null;
+    var noteViewPanel = null;
+
+    var noteListDS = null;
+    var noteListDT  = null;
+    var prevDiv;
+
+    crevtab.setNoteList = function(action, title) {
+        if (!crevtab.active) {
+            return;
+        }
+        if (action === 'hide') {
+            noteListPanel.hide();
+        } else if (action === 'show') {
+            if (!noteListPanel.rendered) {
+                noteListPanel.render(document.body);
+                noteListPanel.rendered = true;
+            }
+            var panelEl = Dom.get('crev-notes-list'); <?php // panel ?>
+            Dom.removeClass(panelEl,'disp-none');
+            Dom.getElementsByClassName('bd', 'div', panelEl, function(o){
+                Dom.setStyle(o,'background-color','#ffffff');
+            });
+            if (title === undefined) {
+                Dom.get('crev-note-list-title').innerHTML = 'Reviewer Notes';
+            } else {
+                Dom.get('crev-note-list-title').innerHTML = title;
+            }
+            crevtab.refreshNoteList(1);
+        }
+    };
+
+    crevtab.refreshNoteList = function(openPanel)
+    {
+        if (noteListDT === null || noteListDS === null) {
+            return;
+        }
+        var oState = noteListDT.getState();
+        var request = noteListDT.get("generateRequest")(oState, noteListDT);
+        if (openPanel === 1) {
+            request += '&oPnl=1';
+        }
+        var oCallback = {
+            success: function(oRequest, oResponse, oPayload) {
+                var newPayload = noteListDT.handleDataReturnPayload(oRequest,
+                    oResponse, oPayload);
+                noteListDT.onDataReturnSetRows(oRequest, oResponse, newPayload);
+                if (oRequest.length >= 7 && oRequest.substr(oRequest.length - 7, 7) === '&oPnl=1') {
+                    noteListPanel.center();
+                    noteListPanel.show();
+                }
+            },
+            failure: function(o) {
+                alert("Failed loading data.");
+            },
+            argument: oState,
+            scope: noteListDT
+        };
+        noteListDS.sendRequest(request, oCallback);
+    };
+
+    crevtab.setNoteView = function(action, title)
+    {
+        if (action === 'hide') {
+    <?php
+    if ($canAddNote) {
+        ?>
+            var visDelEl = Dom.get('crev-vis-delredo-note-btn');
+            Dom.replaceClass(visDelEl, 'v-visible', 'v-hidden');
+        <?php
+    }
+    ?>
+            crevtab.refreshNoteList();
+            noteViewPanel.hide();
+        } else if (action === 'show') {
+            if (!noteViewPanel.rendered) {
+                noteViewPanel.rendered = true;
+                noteViewPanel.render(document.body);
+            }
+            <?php
+            // Fit note to content or max height at 80% of viewport
+            // Ah, if only IE6 honored max-height!
+            ?>
+            var noteEl = Dom.get('crev-note-show'); <?php // formatted note container ?>
+            var viewEl = Dom.get('crev-note-view'); <?php // panel ?>
+            Dom.removeClass(noteEl,'disp-none');
+            Dom.removeClass(viewEl,'disp-none');
+            Dom.getElementsByClassName('bd', 'div', viewEl, function(o){
+                Dom.setStyle(o,'background-color','#ffffff');
+            });
+            var region = Dom.getClientRegion();
+            Dom.setStyle(noteEl, 'overflow', 'hidden');
+            Dom.setStyle(noteEl, 'height', '0pt'); <?php // 0 height for note div ?>
+            if (title == undefined) {
+                Dom.get('crev-note-view-title').innerHTML = 'Reviewer Note';
+            } else {
+                Dom.get('crev-note-view-title').innerHTML = title;
+            }
+            noteViewPanel.center();
+            noteViewPanel.show();
+            var maxPanelHeight = 0.8 * (region.bottom - region.top);
+            var curPanelHeight = parseInt(Dom.getStyle(viewEl, 'height'));
+            if (isNaN(curPanelHeight)) {
+                curPanelHeight = parseInt(viewEl.offsetHeight);
+                if (isNaN(curPanelHeight))
+                    curPanelHeight = 197; <?php // I give up! How 'bout a guess? ?>
+            }
+            var pixToAdd = noteEl.scrollHeight - 11;
+            if ((curPanelHeight + pixToAdd) > maxPanelHeight) {
+                pixToAdd = maxPanelHeight - curPanelHeight;
+            }
+            if (pixToAdd < 14) {
+                pixToAdd = 14;
+            }
+            var topToMove = pixToAdd / 2;
+            var curPanelTop = noteViewPanel.cfg.getProperty('y');
+            noteViewPanel.cfg.setProperty('y', curPanelTop - topToMove);
+            Dom.setStyle(noteEl, 'overflow', 'auto');
+            Dom.setStyle(noteEl, 'height', pixToAdd + 'px');
+        }
+    };
+
+    YAHOO.util.Event.onDOMReady(function(o) {
+
+        noteViewPanel = new YAHOO.widget.Panel('crev-note-view', {
+            width: "460px",
+            close: false,
+            modal: true,
+            draggable: true,
+            visible: false
+        });
+        noteViewPanel.rendered = false;
+        noteViewPanel.hideEvent.subscribe(function(o) {
+            YAHOO.crevtab.setNoteView('hide');
+        });
+        var closeViewNoteBtn = new YAHOO.widget.Button('crev-note-view-close-btn', {
+            id: 'crev-note-view-close-btn-yui',
+            label: 'Close',
+            type: 'button'
+        });
+        closeViewNoteBtn.on('click', function(o) {
+            crevtab.noteRedoID = 0;
+            crevtab.noteEditSig = '';
+            crevtab.setNoteView('hide');
+        });
+    <?php
+    // Conditionally include Edit/Delete buttons
+    if ($canAddNote) {
+        ?>
+        crevtab.canAddNote = true;
+        var delNoteBtn = new YAHOO.widget.Button('crev-note-del-btn', {
+            id: 'crev-note-del-btn-yui',
+            label: 'Delete',
+            type: 'button'
+        });
+        delNoteBtn.on('click', function(o) {
+            if (confirmAction('crev-note-del')) {
+                opRequest('crev-note-del', crevtab.noteRedoID);
+            }
+        });
+        var edNoteBtn = new YAHOO.widget.Button('crev-note-ed-btn', {
+            id: 'crev-note-ed-btn-yui',
+            label: 'Edit',
+            type: 'button'
+        });
+        edNoteBtn.on('click', function(o) {
+            opRequest('crev-note-edit', crevtab.noteRedoID);
+        });
+
+        YAHOO.util.Event.addListener('crev_note', 'paste', YAHOO.crevtab.limitNoteLength);
+        YAHOO.util.Event.addListener('crev_note', 'keyup', YAHOO.crevtab.limitNoteLength);
+        YAHOO.util.Event.addListener('crev_note', 'keydown', YAHOO.crevtab.limitNoteLength);
+        YAHOO.util.Event.addListener('crev_note', 'change', YAHOO.crevtab.limitNoteLength);
+
+        <?php
+    }
+    ?>
+        if (Dom.hasClass('crev-notes-list', 'yui-panel')) {
+            prevDiv = Dom.get('crev-notes-list') ;
+            Dom.getChildrenBy(prevDiv, function(ele) {
+                if (Dom.hasClass(ele, 'container-close')) {
+                    prevDiv.removeChild(ele);
+                }
+            });
+        }
+        noteListPanel = new YAHOO.widget.Panel('crev-notes-list', {
+            width: "790px",
+            close: true,
+            modal: true,
+            draggable: true,
+            visible: false
+        });
+        noteListPanel.rendered = false;
+        noteListPanel.hideEvent.subscribe(function(o) {
+            crevtab.qID = '';
+            crevtab.section = '';
+            if (noteFormPanel !== null && noteFormPanel.rendered) {
+                crevtab.setNoteForm('hide');
+            }
+            if (noteViewPanel !== null && noteViewPanel.rendered) {
+                crevtab.setNoteView('hide');
+            }
+            return true;
+        });
+
+    <?php
+    // Conditionally include Add New button
+    if ($canAddNote) {
+        ?>
+        var addNoteBtn = new YAHOO.widget.Button('crev-add-note-btn', {
+            id: 'crev-add-note-btn-yui',
+            label: 'Add New',
+            type: 'button'
+        });
+        addNoteBtn.on('click', function(o) {
+            YAHOO.crevtab.setNoteForm('show');
+        });
+
+        var noteFormPanel = new YAHOO.widget.Panel('crev-note-frm', {
+            width: "515px",
+            modal: true,
+            close: false,
+            draggable: true,
+            visible: false
+        });
+        noteFormPanel.rendered = false;
+        var saveNoteBtn = new YAHOO.widget.Button('crev-save-note-btn', {
+            id: 'crev-save-note-btn-yui',
+            label: 'Save',
+            type: 'button'
+        });
+        saveNoteBtn.on('click', function(o){opRequest('crev-save-note');});
+        var closeNoteBtn = new YAHOO.widget.Button('crev-close-note-btn', {
+            id: 'crev-close-note-btn-yui',
+            label: 'Cancel',
+            type: 'button'
+        });
+        closeNoteBtn.on('click', function(o){
+            crevtab.setNoteForm('hide');
+        });
+
+        crevtab.limitNoteLength = function() {
+            var el = Dom.get('crev_note');
+            var maxlen = 2000;
+            var have = el.value.length;
+            var remain = maxlen - have;
+            if (remain < 0) {
+                remain = 0;
+            }
+            var ncID = Dom.get('crev_notechars');
+                ncID.innerHTML = remain;
+            if (have > maxlen) {
+                el.value = el.value.substring(0, maxlen);
+                showResultDiag('Limit Reached', 'Your Note has reached the maximum size.');
+            }
+        };
+
+        crevtab.mkNotePostData = function()
+        {
+            var subjEl = Dom.get('crev_note_subject');
+            var qid = crevtab.qID;
+            if (qid.length < 1
+                || qid === ''
+                || crevtab.section.length < 1
+                || crevtab.section === ''
+            ) {
+                showResultDiag('Not Initialized', 'Please refresh the page and try again.');
+                return false;
+            }
+            if (rtrim(subjEl.value) === '') {
+                showResultDiag('No Subject', 'Please enter a subject for your note.');
+                return false;
+            }
+            var noteEl = Dom.get('crev_note');
+            if (rtrim(noteEl.value) === '') {
+                showResultDiag('Note Is Blank ', 'Please enter enter a note.');
+                return false;
+            }
+            var catEl = Dom.get('crev_note_category');
+            var pd = ''
+                + '&cat=' + catEl[catEl.selectedIndex].value
+                + '&isee=0'
+                + '&subj=' + encodeURIComponent(subjEl.value)
+                + '&note=' + encodeURIComponent(noteEl.value)
+                + '&qid=' + encodeURIComponent(qid)
+                + '&nSect=' + encodeURIComponent(crevtab.section);
+            return pd;
+        };
+
+        var clearNoteForm = function()
+        {
+            var subjEl = Dom.get('crev_note_subject');
+            var noteEl = Dom.get('crev_note');
+            var ncEl = Dom.get('crev_notechars');
+            subjEl.value = '';
+            noteEl.value = '';
+            ncEl.innerHTML = '2000';
+            crevtab.noteRedoID = 0;
+            crevtab.noteEditSig = '';
+            crevtab.refreshNoteList();
+        };
+
+        crevtab.setNoteForm = function(action)
+        {
+            var frmDiv = Dom.get('crev-note-frm');
+            if (action === 'hide') {
+                if (noteViewPanel != null && noteViewPanel.rendered) {
+                    noteViewPanel.hide();
+                }
+                clearNoteForm();
+                noteFormPanel.hide();
+            } else if (action === 'show') {
+                Dom.removeClass(frmDiv, 'disp-none');
+                if (!noteFormPanel.rendered) {
+                    noteFormPanel.rendered = true;
+                    noteFormPanel.render(document.body);
+                }
+                noteFormPanel.center();
+                noteFormPanel.show();
+                if (crevtab.noteRedoID && crevtab.noteEditSig.length) {
+                    saveNoteBtn.set('label', 'Update');
+                } else {
+                    saveNoteBtn.set('label', 'Save');
+                }
+            }
+            return false;
+        };
+
+        <?php
+    } ?>
+
+        var clippedText = function(txt)
+        {
+            return '<table class="cliptext" style="border:none" cellspacing="0" '
+                + 'cellpadding="0"><tbody><tr><td class="cliptext" style="border:none">'
+                + txt + '</td></tr></tbody></table>';
+        };
+
+        var dtClipSubj = function(elCell, oRecord, oColumn, oData)
+        {
+            elCell.innerHTML = clippedText(oRecord.getData('subj'));
+            elCell.onclick = function(e){opRequest('crev-note-show', oRecord.getData('dbid'));};
+        };
+
+        var dtClipNote = function(elCell, oRecord, oColumn, oData)
+        {
+            elCell.innerHTML = clippedText(oRecord.getData('note'));
+            elCell.onclick = function(e){opRequest('crev-note-show', oRecord.getData('dbid'));};
+        };
+
+        var DTcfg, DSflds = [
+            'dbid',
+            'cat',
+            'owner',
+            'ndate',
+            'subj',
+            'note'
+        ];
+        var DTcols = [
+            {key:"subj", label:"Subject", sortable:true, formatter: dtClipSubj, width:150},
+            {key:"cat", label:"Category", sortable:false, width:100},
+            {key:"note",  label:"Note", sortable:false, formatter: dtClipNote, width:230},
+            {key:"ndate", label:"Date", sortable:true, width:55},
+            {key:"owner", label:"Owner", sortable:false, width:110}
+        ];
+
+    <?php
+    if ($toPDF) {
+        ?>
+
+        noteListDS = new YAHOO.util.DataSource(YAHOO.crevtab.notesData);
+        noteListDS.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+        noteListDS.responseSchema = {fields: DSflds};
+
+        DTcfg = {
+            draggableColumns:false,
+            sortedBy:{key:"ndate", dir:"yui-dt-desc" },
+            dynamicData: false
+        };
+        noteListDT = new YAHOO.widget.DataTable("crev-dtNotesDiv", DTcols,
+            noteListDS, DTcfg
+        );
+        noteListDT.render(document.body);
+
+        <?php
+    } else {
+        ?>
+
+        noteListDS = new YAHOO.util.XHRDataSource("<?php
+            echo $sitepath; ?>case/caseFolderPages/reviewernotes-ws.sec");
+        noteListDS.responseType = YAHOO.util.XHRDataSource.TYPE_JSON;
+        noteListDS.responseSchema = {
+            resultsList: "Response.Records",
+            fields: DSflds,
+            metaFields: {
+                totalRecords: "Response.Total",
+                rowsPerPage: "Response.RowsPerPage",
+                recordOffset: "Response.RecordOffset",
+                page: "Response.Page"
+            }
+        };
+
+        var noteListRequestBuilder = function(oState, oSelf)
+        {
+            <?php // Get states or use defaults ?>
+            oState = oState || {pagination:null, sortedBy:null};
+            var sort = (oState.sortedBy) ? oState.sortedBy.key : "ndate";
+            var dir = (oState.sortedBy
+                && oState.sortedBy.dir == YAHOO.widget.DataTable.CLASS_DESC)
+                    ? "yui-dt-desc" : "yui-dt-asc";
+            var startIndex = (oState.pagination) ? oState.pagination.recordOffset : 0;
+            var results = (oState.pagination)
+                ? oState.pagination.rowsPerPage : 15;
+
+            <?php // Build custom request ?>
+            return  ("?si=" + startIndex
+                + "&pp=" + results
+                + "&ord=" + sort
+                + "&dir=" + dir
+                + "&qID=" + YAHOO.crevtab.qID
+                + "&nSect=" + YAHOO.crevtab.section
+            );
+        };
+
+        DTcfg = {
+            draggableColumns:true,
+            sortedBy:{key:"ndate", dir:"yui-dt-desc" },
+            paginator: new YAHOO.widget.Paginator({
+                alwaysVisible: false,
+                totalRecords: 0,
+                recordOffset: 0,
+                rowsPerPage: 15,
+                containers: ['crev-dtNotesNav'],
+                template: "{TotalRows} <span class=\"yui-pg-records\">Records</span> "
+                    + "<span class=\"yui-pg-extra\">Page</span> {CurrentPageReport} "
+                    + "{FirstPageLink} {PreviousPageLink} {PageLinks} {NextPageLink} "
+                    + "{LastPageLink}"
+                    + "<span class=\"yui-pg-extra\"> &ensp; 15 Records per Page</span>",
+                pageLinks: 6
+            }),
+            initialRequest: "?si=0&pp=15"
+                + "&ord=yui-dt-desc&dir=ndate&qID=" + YAHOO.crevtab.qID
+                + "&nSect=" + YAHOO.crevtab.section,
+            generateRequest: noteListRequestBuilder,
+            dynamicData: true
+        };
+        noteListDT = new YAHOO.widget.DataTable("crev-dtNotesDiv", DTcols,
+            noteListDS, DTcfg);
+
+        noteListDT.handleDataReturnPayload = function(oRequest, oResponse, oPayload)
+        {
+            var ttl, pp, si, li;
+            si = oResponse.meta.recordOffset;
+            pp = oResponse.meta.rowsPerPage;
+            ttl = oResponse.meta.totalRecords;
+            if (ttl == 0)
+                li = 0;
+            else if (si + pp <= ttl)
+                li = (si + pp) - 1;
+            else
+                li = ttl - 1;
+
+            oPayload.totalRecords = ttl;
+            oPayload.pagination.totalRecords = ttl;
+            oPayload.pagination.rowsPerPage = pp;
+            oPayload.pagination.recordOffset = si;
+            oPayload.pagination.records = [si,li];
+            oPayload.pagination.page = oResponse.meta.page;
+            return oPayload;
+        };
+        noteListDT.render(document.body);
+
+        var dtNotePick = function(oArg) {
+
+            var rec = noteListDT.getRecord(oArg.target);
+            opRequest('crev-note-show', rec.getData('dbid'));
+        };
+
+        <?php // Enable row highlighting ?>
+        noteListDT.subscribe("rowMouseoverEvent", noteListDT.onEventHighlightRow);
+        noteListDT.subscribe("rowMouseoutEvent", noteListDT.onEventUnhighlightRow);
+        noteListDT.subscribe("rowClickEvent", dtNotePick);
+
+        <?php // Turn off obnoxious "Loading..." message ?>
+        var catchLoading = function(oArg) {
+            if (oArg.className === "yui-dt-loading")
+                this.hideTableMessage();
+        };
+        noteListDT.on("tableMsgShowEvent", catchLoading);
+
+<?php
+    } ?>
+
+        crevtab.active = true;
+    });
+
+    })();
+
+    </script>
+
+<?php
+} // !$toPDF

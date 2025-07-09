@@ -1,0 +1,346 @@
+<?php
+/**
+ * Configure names to include with investigator GDC
+ */
+
+require_once __DIR__ . '/../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+require_once __DIR__ . '/../includes/php/'.'class_access.php';
+require_once __DIR__ . '/../includes/php/Models/Globals/Features/TenantFeatures.php';
+$accCls = UserAccess::getInstance();
+
+if (!$session->value('IN_CASE_HOME')
+    || $session->secure_value('userClass') != 'vendor'
+    || !isset($_SESSION['currentCaseID'])
+    || !($caseID = $_SESSION['currentCaseID'])
+    || !$accCls->allow('accCaseMng')
+) {
+    return;
+}
+
+$e_clientID = $clientID = $_SESSION['clientID'];
+$e_spID = $spID = $_SESSION['vendorID'];
+$e_caseID = intval($caseID);
+$spdb = GLOBAL_SP_DB;
+require_once __DIR__ . '/../includes/php/'.'class_db.php';
+require_once __DIR__ . '/../includes/php/'.'funcs_misc.php';
+
+$clientID = $_SESSION['clientID'];
+$tf = (new TenantFeatures($clientID))->tenantHasFeatures([Feature::AI_SUMMARISATION], FEATURE::APP_TPM);
+$aiSummaryEnabled = (filter_var(getenv("AI_SUMMARY_ENABLED"), FILTER_VALIDATE_BOOLEAN) && !empty($tf[Feature::AI_SUMMARISATION]));
+if ($aiSummaryEnabled){
+    include_once __DIR__ . '/../includes/php/class_waitspin.php';
+    $waitSpinJS = WaitSpin::headJs(16, ['waitspinCfgTabDiv']);
+    echo $waitSpinJS;
+}
+
+
+$sql = "SELECT caseName, userCaseNum FROM cases "
+    . "WHERE id = '$e_caseID' AND clientID = '$e_clientID' LIMIT 1";
+[$caseName, $userCaseNum] = $dbCls->fetchArrayRow($sql);
+
+if (0) {
+
+    ?>
+    Configure text to screen.
+
+    <p><a href="javascript:void(0)" onclick="iHelp.autoLoad('gdc-1', this)">Help Topic 1</a></p>
+    <p><a href="javascript:void(0)" onclick="iHelp.autoLoad('gdc-2', this)">Help Topic 2</a></p>
+
+    <?php
+} ?>
+
+<div id="pgdiv3">
+
+
+<table width="100%" summary="layout" cellpadding="0" cellspacing="0">
+<tr>
+  <td width="65%" valign="top">
+
+<h3>Screen with Modified or Additional Subject Names</h3>
+
+<div id="ctrl-scrbtn" class="marg-bot1e" style="float: left; margin-bottom: 5px;">
+    <div style="float:left;line-height: 12px;"><strong>Note:</strong> Changes made on this page <em>are not saved!</em><br />
+        They are applied only if a new GDC is generated before closing this dialog.<br />
+        Click the &quot;Screen Now&quot; button to generate a new GDC with this configuration.</div>
+    <div  id="waitspinCfgTabDiv" style="float:left; margin: 18px 0 0 10px;"></div>
+    <div id="reveal-screen-now" style="float:left; margin: 13px 0 0 5px;"><button id="gdc-run" class="btn">Screen Now</button></div>
+</div>
+
+  <div id="cfg-name-list"></div>
+
+  </td><td valign="top">
+    <div id="subjectNameCntnr" style="margin-top: 1.5em">
+<div class="surround-indent">
+
+    <div class="marg-bot1e"><b>Subject Name</b></div>
+
+    <table width="85%" align="center" cellpadding="3" cellspacing="0">
+    <tr>
+        <td>Type</td>
+        <td>
+            <input id="gdc-cfg-type-e" name="gdc-cfg-type" type="radio"
+                class="ckbx marg-rt0" value="E" />
+                <label for="gdc-cfg-type-e" class="fw-normal">Entity</label> &emsp;
+            <input id="gdc-cfg-type-p" name="gdc-cfg-type" type="radio"
+                class="ckbx marg-rt0" value="P" />
+                <label for="gdc-cfg-type-p" class="fw-normal">Person</label>
+        </td>
+    </tr>
+    <tr><td colspan="2"><div
+        style="border-top: 1px solid #aaaaaa;line-height:2px">&nbsp;</div></td></tr>
+    <tr>
+        <td>Full Name</td>
+        <td><input type="text" id="gdc-cfg-full" maxlength="100"
+            class="cudat-normal marg-rt0" /></td>
+    </tr>
+    <tr><td> </td><td class="ta-cent">&mdash; OR &mdash;</td></tr>
+    <tr>
+        <td>First Name</td>
+        <td><input type="text" id="gdc-cfg-first" maxlength="100"
+            class="cudat-normal marg-rt0" /></td>
+    </tr>
+    <tr>
+        <td>Last Name</td>
+        <td><input type="text" id="gdc-cfg-last" maxlength="100"
+            class="cudat-normal marg-rt0" /></td>
+    </tr>
+    <tr>
+        <td></td>
+        <td align="right"><div class="marg-topsm"><button id="gdc-cfg-add" class="btn">Add</button>
+            <button id="gdc-cfg-cancel" class="marg-rt0 btn">Clear</button></td>
+    </tr>
+    </table>
+
+</div>
+
+    </div>
+  </td>
+</tr>
+</table>
+
+</div>
+<script type="text/javascript">
+
+(function(){
+
+var Dom = YAHOO.util.Dom,
+    Event = YAHOO.util.Event,
+    Lang = YAHOO.lang,
+    Util = YAHOO.cms.Util;
+
+YAHOO.namespace('gdccfg');
+
+var conf = YAHOO.gdccfg;
+conf.person = 0;
+
+conf.togCk = function(ele, idx) {
+    // Block the Include checkbox toggling and reverse checked state if the Screen Now button is hidden due to a screening that's underway
+    if (Dom.getStyle('reveal-screen-now', 'display') == 'none') {
+        if (ele.checked) {
+            ele.checked = false;
+        } else {
+            ele.checked = true;
+        }
+        return false;
+    }
+    var v = (ele.checked) ? 1 : 0;
+    gdcdata.nameConfig[idx].incl = v;
+};
+
+conf.togEtype = function(ele, idx) {
+    // Block the Type toggling if the Screen Now button is hidden due to a screening that's underway
+    if (Dom.getStyle('reveal-screen-now', 'display') == 'none') {
+        return false;
+    }
+    var v, t;
+    if (ele.innerHTML == 'Person') {
+        v = 'E';
+        t = 'Entity';
+    } else {
+        v = 'P';
+        t = 'Person';
+    }
+    gdcdata.nameConfig[idx].eType = v;
+    ele.innerHTML = t;
+    return false;
+};
+
+conf.displayNames = function() {
+    var txt = '<table class="gray-sp" width="100%" cellpadding="3" cellspacing="2">\n'
+        + '<tr>\n'
+        + '  <th width="20%">Last Name</th>\n'
+        + '  <th width="20%">First Name</th>\n'
+        + '  <th width="34%">Full Name</th>\n'
+        + '  <th width="8%">Type</th>\n'
+        + '  <th class="cent">Include</th>\n'
+        + '  <th>Edit</th>\n'
+        + '</tr>\n';
+    var i, cls, ck, obj, first, last, full, eType;
+    for (i in gdcdata.nameConfig) {
+        obj = gdcdata.nameConfig[i];
+        first = last = full = '';
+        if (obj.basis == 'fila') {
+            first = obj.first;
+            last = obj.last;
+        } else {
+            full = obj.name;
+        }
+        if (obj.src != 'other') {
+            edLink = 'n/a';
+        } else {
+            edLink = '<span '
+                + 'onclick="YAHOO.gdccfg.loadName(' + i + ')" '
+                + 'class="fas fa-pencil-alt" style="font-size: 16px;"></span>';
+        }
+        ck = (obj.incl) ? ' checked="checked"': '';
+        eType = (obj.eType == 'P') ? 'Person': 'Entity';
+        cls = (i & 1) ? 'odd': 'even';
+        txt += '<tr class="' + cls + '">\n'
+            + '  <td>' + last + '</td>\n'
+            + '  <td>' + first + '</td>\n'
+            + '  <td>' + full + '</td>\n'
+            + '  <td><a href="javascript:void(0)" title="Click to change Type" '
+            + 'onclick="return YAHOO.gdccfg.togEtype(this, ' + i + ')">' + eType + '</a></td>\n'
+            + '  <td class="cent"><input class="marg-rt0" alt="" type="checkbox" '
+            + 'onclick="YAHOO.gdccfg.togCk(this, ' + i + ')"'
+            + ck + ' /></td>\n'
+            + '  <td class="cent">' + edLink + '</td>\n'
+            + '</tr>\n';
+    }
+    txt += '</table>';
+    Dom.get('cfg-name-list').innerHTML = txt;
+};
+
+conf.clearForm = function() {
+    conf.loadNameIdx = -1;
+    Dom.get('gdc-cfg-full').value = '';
+    Dom.get('gdc-cfg-first').value = '';
+    Dom.get('gdc-cfg-last').value = '';
+    conf.addBtn.set('label', 'Add');
+    conf.cancelBtn.set('label', 'Clear');
+    Dom.get('gdc-cfg-first').focus();
+};
+
+conf.loadNameIdx = -1;
+
+conf.loadName = function(idx) {
+    // Block the name load if the Screen Now button is hidden due to a screening that's underway
+    if (Dom.getStyle('reveal-screen-now', 'display') == 'none') {
+        return false;
+    }
+    conf.loadNameIdx = idx;
+    var first = '', last = '', full = '';
+    var obj = gdcdata.nameConfig[idx];
+    if (obj.basis == 'fila') {
+        first = obj.first;
+        last = obj.last;
+    } else {
+        full = obj.name;
+    }
+    Dom.get('gdc-cfg-full').value = full;
+    Dom.get('gdc-cfg-first').value = first;
+    Dom.get('gdc-cfg-last').value = last;
+    Dom.get('gdc-cfg-type-e').checked = (obj.eType == 'E');
+    Dom.get('gdc-cfg-type-p').checked = (obj.eType == 'P');
+    conf.addBtn.set('label', 'Update');
+    conf.cancelBtn.set('label', 'Cancel');
+};
+
+conf.saveName = function() {
+    var first = Util.trim(Dom.get('gdc-cfg-first').value);
+    var last = Util.trim(Dom.get('gdc-cfg-last').value);
+    var full = Util.trim(Dom.get('gdc-cfg-full').value);
+    var isE = Dom.get('gdc-cfg-type-e').checked;
+    var isP = Dom.get('gdc-cfg-type-p').checked;
+    var err = [];
+    if (full != '' && (first != '' || last != '')) {
+        err.push('Enter First/Last OR Full, but not both');
+    } else if (full != '') {
+    } else if (first == '') {
+        err.push('Missing First name');
+    } else if (last == '') {
+        err.push('Missing Last name');
+    }
+    if (!isE && !isP) {
+        err.push('Missing Type');
+    }
+    if (err.length) {
+        gdcdata.multiError('Invalid Input', err);
+        return false;
+    }
+    var etype = (isP) ? 'P': 'E';
+    conf.addBtn.on('click', gdcdata.opRequest('prep-name', first, last, full, etype));
+};
+
+conf.updateConfig = function(first, last, full, etype)
+{
+    var idx = conf.loadNameIdx;
+    if (idx == -1) {
+        idx = gdcdata.nameConfig.length;
+        if (full != '') {
+            gdcdata.nameConfig[idx]= {
+                incl: 1,
+                eType: etype,
+                basis: 'full',
+                src: 'other',
+                name: full
+            };
+        } else {
+            gdcdata.nameConfig[idx]= {
+                incl: 1,
+                eType: etype,
+                basis: 'fila',
+                src: 'other',
+                first: first,
+                last: last
+            };
+        }
+    } else {
+        gdcdata.nameConfig[idx].eType = etype;
+        if (full != '') {
+            gdcdata.nameConfig[idx].basis = 'full';
+            gdcdata.nameConfig[idx].src = 'other';
+            gdcdata.nameConfig[idx].name = full;
+        } else {
+            gdcdata.nameConfig[idx].basis = 'fila';
+            gdcdata.nameConfig[idx].src = 'other';
+            gdcdata.nameConfig[idx].first = first;
+            gdcdata.nameConfig[idx].last = last;
+        }
+    }
+    conf.clearForm();
+    conf.displayNames();
+};
+
+Event.onDOMReady(function(o){
+
+    var runGdcBtn = new YAHOO.widget.Button('gdc-run',
+        {label: 'Screen Now', type: 'button', class: 'btn'}
+    );
+    Dom.addClass('gdc-run-button', 'btn');
+    runGdcBtn.on('click', function(o){
+        YAHOO.waitspin.start('waitspinCfgTabDiv');
+        Dom.addClass('reveal-screen-now', 'disp-none');
+        Dom.addClass('subjectNameCntnr', 'disp-none');
+        gdcdata.opRequest('gdc-run');
+    });
+
+    conf.addBtn = new YAHOO.widget.Button('gdc-cfg-add', {label: 'Add', type: 'button'});
+    conf.addBtn.on('click', conf.saveName);
+
+    conf.cancelBtn = new YAHOO.widget.Button('gdc-cfg-cancel', {label: 'Clear', type: 'button'});
+    conf.cancelBtn.on('click', conf.clearForm);
+
+    Dom.setStyle('pgdiv3', 'overflow', 'auto');
+    Dom.setStyle('pgdiv3', 'width', gdcdata.pgdivWidth + 'px');
+    Dom.setStyle('pgdiv3', 'height', gdcdata.pgdivHeight + 'px' );
+    Dom.setStyle('pgdiv3', 'display', 'block');
+
+    if (gdcdata.nameConfig.length) {
+        conf.displayNames();
+    }
+});
+
+})();
+</script>

@@ -1,0 +1,281 @@
+<?php
+/**
+ * List user log entries for case and provide data fro pdf
+ */
+
+if (defined('IN_SPL_PDF')) {
+    // prevent direct access
+    if (realpath($_SERVER['SCRIPT_FILENAME']) == __FILE__) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            return;
+        }
+        else {
+            exit;
+        }
+    }
+    $isVendor  = true;
+    $userLevel = VENDOR_ADMIN;
+} else {
+    include_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+    $session->cms_logged_in(true, -1);
+    include_once __DIR__ . '/../../includes/php/'.'class_access.php';
+    $accCls = UserAccess::getInstance();
+    if (!$accCls->allow('accCaseLog')) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            echo 'Access denied.';
+            return;
+        }
+        else {
+            exit('Access denied.');
+        }
+    }
+    include_once __DIR__ . '/../../includes/php/'.'funcs_cases.php';
+    include_once __DIR__ . '/../../includes/php/'.'class_db.php';
+    $dbCls->open();
+    // Validate access and assign $clientID, $caseID and $caseRow
+    if (!isset($_SESSION['currentCaseID'])
+        || !($caseID = $_SESSION['currentCaseID'])
+        || !($clientID = $_SESSION['clientID'])
+        || !($caseRow = fGetCaseRow($caseID))
+    ) {
+        return;
+    }
+    $splPDF = false;
+    $isVendor = $_SESSION['sim-userClass'] == 'vendor';
+    $userType = $_SESSION['userType'];
+    $userLevel = $session->secure_value('accessLevel');
+}
+
+$minPP = 15;
+$startIdx = 0;
+$recsPerPage = $minPP;
+$ttlRecs = 0;
+$sortBy = 'dt';
+$sortDir = 'yui-dt-desc';
+if (!isset($toPDF)) {
+    $toPDF = false;
+}
+
+?>
+
+<div style="margin:1em 7px;">
+<div id="caselog"></div>
+</div>
+
+<script type="text/javascript">
+
+var caseLogList = null;
+
+(function(){
+    var Dom = YAHOO.util.Dom;
+
+    YAHOO.widget.DataTable.preventTranslations = function(elLiner, oRecord, oColumn, oData) {
+        elLiner.classList.add("no-trsl");
+        elLiner.innerHTML = oData;
+        elLiner.setAttribute("data-tl-ignore", "1");
+    };
+
+    var mkCaseLogList = function(o) {
+
+<?php
+if ($toPDF) {
+    ?>
+
+        <?php // total widths = 668  ?>
+        var myColumnDefs = [
+            {key:"dt", label:"Date", width: 110, sortable: true, sortOptions: {field: "id"}},
+            {key:"ev", label:"Event", width: 110},
+            {key:"un", label:"User", width: 160, formatter: YAHOO.widget.DataTable.preventTranslations},
+            {key:"cn", label:"Case", width: 80},
+            {key:"det",label:"Details", width: 208, formatter: YAHOO.widget.DataTable.preventTranslations}
+        ];
+
+        var myDataSource = new YAHOO.util.DataSource(YAHOO.cfData.caselogData);
+        myDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+        myDataSource.responseSchema = {
+            fields: ["id","dt","un","ev","cn","det"]
+        };
+
+        var myConfigs = {
+            <?php // Set up initial sort state ?>
+            sortedBy: {
+                key: "dt",
+                dir: "yui-dt-desc"
+            },
+            dynamicData: false
+        };
+
+        var myDataTable = new YAHOO.widget.DataTable("caselog", myColumnDefs,
+            myDataSource, myConfigs
+        );
+        myDataTable.render(document.body);
+
+<?php
+} else {
+    ?>
+
+        <?php // total widths = 668  ?>
+        var myColumnDefs = [
+            {key:"dt", label:"Date", width: 110, sortable: true, sortOptions: {field: "id"}},
+            {key:"ev", label:"Event", sortable: true, width: 110, formatter: YAHOO.widget.DataTable.preventTranslations},
+            {key:"un", label:"User", sortable: true,  width: 160},
+            {key:"cn", label:"Case", width: 80},
+            {key:"det",label:"Details", width: 208, formatter: YAHOO.widget.DataTable.preventTranslations}
+        ];
+
+        var myDataSource = new YAHOO.util.XHRDataSource("<?php
+            echo $sitepath; ?>case/caseFolderPages/caselog-ws.sec");
+        myDataSource.responseType = YAHOO.util.XHRDataSource.TYPE_JSON;
+        myDataSource.responseSchema = {
+            resultsList: "Response.Records",
+            fields: ["id","dt","un","ev","cn","det"],
+            metaFields: {
+                totalRecords: "Response.Total",
+                rowsPerPage: "Response.RowsPerPage",
+                recordOffset: "Response.RecordOffset",
+                page: "Response.Page"
+            }
+        };
+    <?php
+        if ($userLevel == SUPER_ADMIN) {
+            ?>
+            myDataSource.subscribe('dataErrorEvent', function(o){
+            alert(YAHOO.lang.dump(o.response.responseText, 1));
+            });
+        <?php
+        } ?>
+
+        var myRequestBuilder = function(oState, oSelf)
+        {
+            <?php // Get states or use defaults ?>
+            oState = oState || {pagination:null, sortedBy:null};
+            var sort = (oState.sortedBy) ? oState.sortedBy.key : "dt";
+            var dir = (oState.sortedBy
+                && oState.sortedBy.dir === YAHOO.widget.DataTable.CLASS_DESC)
+                    ? "yui-dt-desc" : "yui-dt-asc";
+            var startIndex = (oState.pagination) ? oState.pagination.recordOffset : 0;
+            var results = (oState.pagination)
+                ? oState.pagination.rowsPerPage : <?php echo $recsPerPage?>;
+
+            <?php // Build custom request ?>
+            return "?si=" + startIndex + "&pp=" + results + "&dir=" + dir + "&sort=" + sort;
+        };
+
+        var myConfigs = {
+            <?php // Set up pagination ?>
+            paginator: new YAHOO.widget.Paginator({
+                alwaysVisible: false,
+                rowsPerPage: <?php echo $recsPerPage?>,
+                totalRecords: <?php echo $ttlRecs?>,
+                recordOffset: <?php echo $startIdx?>,
+                template: "{TotalRows} <span class=\"yui-pg-records\">Records</span> "
+                    + "<span class=\"yui-pg-extra\">Page</span> {CurrentPageReport} "
+                    + "{FirstPageLink} {PreviousPageLink} {PageLinks} {NextPageLink} "
+                    + "{LastPageLink} {RowsPerPageDropdown} "
+                    + "<span class=\"yui-pg-extra\">Records per Page</span>",
+                rowsPerPageOptions: [15,20,30,50,75,100],
+                pageLinks: 6
+            }),
+            <?php // Set up initial sort state ?>
+            sortedBy: {
+                key: "<?php echo $sortBy?>",
+                dir: "<?php echo $sortDir?>"
+            },
+            <?php // Sorting and pagination will be routed to the server via generateRequest ?>
+
+            initialRequest: "<?php echo "?si=$startIdx"
+                . "&pp=$recsPerPage&sort=$sortBy&dir=$sortDir"; ?>",
+            generateRequest: myRequestBuilder,
+            dynamicData: true
+        };
+
+        var myDataTable = new YAHOO.widget.DataTable("caselog", myColumnDefs,
+            myDataSource, myConfigs
+        );
+        myDataTable.render(document.body);
+
+        <?php // Turn off obnoxious "Loading..." message ?>
+
+        var catchLoading = function(oArg) {
+            if (oArg.className == "yui-dt-loading")
+                this.hideTableMessage();
+        };
+        myDataTable.on("tableMsgShowEvent", catchLoading);
+
+        myDataTable.handleDataReturnPayload = function(oRequest, oResponse, oPayload)
+        {
+            var ttl, pp, si, li;
+            si = oResponse.meta.recordOffset;
+            pp = oResponse.meta.rowsPerPage;
+            ttl = oResponse.meta.totalRecords;
+            if (ttl == 0)
+                li = 0;
+            else if (si + pp <= ttl)
+                li = (si + pp) - 1;
+            else
+                li = ttl - 1;
+
+            oPayload.totalRecords = ttl;
+            oPayload.pagination.totalRecords = ttl;
+            oPayload.pagination.rowsPerPage = pp;
+            oPayload.pagination.recordOffset = si;
+            oPayload.pagination.records = [si,li];
+            oPayload.pagination.page = oResponse.meta.page;
+            return oPayload;
+        };
+
+<?php
+} ?>
+
+        return {
+            oDS: myDataSource,
+            oDT: myDataTable
+        };
+    };
+    YAHOO.util.Event.onDOMReady(function(o){
+        caseLogList = mkCaseLogList(o);
+    });
+
+})();
+
+<?php
+if (!$toPDF) {
+    ?>
+
+    function caseLogRefresh()
+    {
+        if (!YAHOO.lang.isObject(caseLogList))
+            return;
+        var DT = caseLogList.oDT;
+        var oState = DT.getState();
+        var request = DT.get("generateRequest")(oState, DT);
+        var oCallback = {
+            success: function(oRequest, oResponse, oPayload) {
+                var newPayload = DT.handleDataReturnPayload(oRequest, oResponse, oPayload);
+                DT.onDataReturnSetRows(oRequest, oResponse, newPayload);
+            },
+            failure: function() {
+    <?php
+    if ($userType == SUPER_ADMIN) {
+        ?>
+                alert("Failed loading data.");
+            <?php
+    } else {
+        ?>
+                var a=1; <?php // do nothing ?>
+<?php
+    } ?>
+            },
+            argument: oState,
+            scope: DT };
+        caseLogList.oDS.sendRequest(request, oCallback);
+    }
+
+    <?php
+} ?>
+
+</script>

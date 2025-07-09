@@ -1,0 +1,222 @@
+<?php
+require_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(TRUE, -1);
+require_once __DIR__ . '/../../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCaseBizPrac')) {
+    // The following prevents this condition from
+    // breaking PDF rendering
+    if (isset($toPDF) && $toPDF) {
+        echo 'Access denied.';
+        return;
+    }
+    else {
+        exit('Access denied.');
+    }
+}
+require_once __DIR__ . '/../../includes/php/'."funcs.php";
+// Check for login/Security
+fchkUser( "casehome" );
+require_once __DIR__ . '/../../includes/php/'."ddq_funcs.php";
+require_once __DIR__ . '/../../includes/php/'."country_state_ddl.php";
+include_once __DIR__ . '/../../includes/php/'.'Models/TPM/IntakeForms/IntakeFormQuestions.php';
+
+$e_clientID = intval($_SESSION['clientID']);
+
+  if( $_SESSION['ddqRow'] )
+    {
+      require __DIR__ . '/../../includes/php/'."dbcon.php";
+
+      // Load the countries row into SESSION data
+      $ddqID = $_SESSION['ddqRow'][0];
+      $e_ddqID = intval($ddqID);
+      $_SESSION['inFormRspnsCountries'] = $dbCls->fetchValueArray(
+          "SELECT iso_code FROM inFormRspnsCountries WHERE inFormRspnsID = '$e_ddqID' AND tenantID = '$e_clientID'"
+      );
+    }
+
+?>
+
+
+
+    <!--Start Center Content-->
+
+
+<form action="ddq4.php" method="post" name="ddqform" class="cmsform" id="ddqform">
+<input type="hidden" name="Submit" />
+<?php
+  // We need to load the Business Practices page questions from onlineQuestions
+  $_SESSION['aOnlineQuestions'] = foqLoadCompletePage( $_SESSION['clientID'],
+          $_SESSION['languageCode'], $_SESSION['ddqRow'][107], 'Business Practices',
+          $_SESSION['ddqID'] );
+
+  $_SESSION['CNC']['baRemoveCountryModal'] = foqGetQRowFromPage($_SESSION['aOnlineQuestions'],
+                                                                'CMD_RM_COUNTRYDBI_MODAL');
+?>
+
+
+<?php if (!($_SESSION['CNC']['baRemoveCountryModal'])
+          && !in_array($_SESSION['clientID'], HP_ALL)
+          && !($_SESSION['clientID'] == AGILENT2_CLIENTID && $_SESSION['ddqRow'][107] == DDQ_SHORTFORM_FORM2)
+         ) { ?>
+     <b>INDUSTRY</b>
+
+     <!-- Currently we only get the countries in the DDQ process -->
+     <?php if($_SESSION['ddqRow']) {
+        //  SEC-850: Improvement to TXT_BUSINCOUNTRY
+        $path = realpath(__DIR__.'/../../includes/php/Lib/Database');
+        require_once $path.'/MySqlPdo.php';
+
+        $DB        = new MySqlPdo(['clientID' => $e_clientID]);
+        $labelText = $DB->fetchValue(
+            "SELECT  labelText\n".
+            "FROM    onlineQuestions\n".
+            "WHERE   clientID = :clientID\n".
+            "AND     questionID = 'TEXT_BUSINCOUNTRY_DDQ4'\n".
+            "AND     languageCode = 'EN_US'\n".
+            "AND     caseType = :caseType\n".
+            "AND     ddqQuestionVer = :ddqQuestionVer",
+            [
+                ':clientID'       => $e_clientID,
+                ':caseType'       => $_SESSION['ddqRow']['caseType'],
+                ':ddqQuestionVer' => $_SESSION['ddqRow']['ddqQuestionVer']
+            ]
+        );
+        $labelText = (empty($labelText)) ?
+            'Currently doing business in the following ' . $accCls->trans->codeKey('country') . '(s):' :
+            str_replace(
+                ['\r\n','\r','\n'],
+                '<br>',
+                strip_tags((string) $labelText, '<br>')
+            );
+        ?>
+     <p><?= $labelText; ?></p>
+     <p>
+     <?php include('echo_countries.php'); ?>
+
+     </p>
+     <?php } ?>
+<?php } // end if $_sclientID] != HP_CLIENTID ?>
+
+  <table width="760" border="0">
+  <?php
+    // Load up the INDUSTRY Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the INDUSTRY Section elements
+        if( $aOnlineQuestionsRow[9] == "INDUSTRY" )
+          {
+            echo( "<tr>" );
+              foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 300 );
+              foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 500 );
+            echo( "</tr>" );
+          }
+      }
+  ?>
+  </table>
+
+<table border="0" cellpadding="0" cellspacing="10" style="display: block; width: 100%; overflow-x: auto;">
+  <tbody style="display: block">
+  <?php
+    // Load up the PAST BUSINESS CONDUCT Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the PAST BUSINESS CONDUCT Section elements
+        if( $aOnlineQuestionsRow[9] == "PAST BUSINESS CONDUCT" )
+          {
+
+
+            if( $aOnlineQuestionsRow[6] == 'tarbYes' )
+              {
+                echo( "<tr>" );
+                  foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 500 );
+                echo( "</tr>" );
+                echo( "<tr>" );
+                  foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 500 );
+                echo( "</tr>" );
+              }
+            else
+              {
+                echo( "<tr style='float: left; width: 100%;'>" );
+                  foqPrintEchoLabel( $aOnlineQuestionsRow, 1, '" style="float: left; width: 68%' );
+                  foqEchoDDQvalue( $aOnlineQuestionsRow, 1, '" style="float: left; width: 26%' );
+                echo( "</tr>" );
+              }
+
+//            echo( "<tr>" );
+//              foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 754 );
+//              foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 69 );
+//            echo( "</tr>" );
+          }
+      }
+  ?>
+  </tbody>
+</table>
+
+<table width="500" border="0">
+  <?php
+    // Load up the EXPLAIN CONDUCT Section
+    foreach( $_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow )
+      {
+        // Find all of the EXPLAIN CONDUCT Section elements
+        if( $aOnlineQuestionsRow[9] == "EXPLAIN CONDUCT" )
+          {
+            echo( "<tr>" );
+              foqPrintEchoLabel( $aOnlineQuestionsRow, 1, 500 );
+            echo( "</tr>" );
+            echo( "<tr>" );
+              foqEchoDDQvalue( $aOnlineQuestionsRow, 1, 500 );
+            echo( "</tr>" );
+          }
+      }
+  ?>
+</table>
+
+<?php
+echo( "<table width=\"100%\" border=\"0\" cellspacing=\"8\" cellpadding=\"0\">" );
+
+        // Load up the Extended Question and Answer (eQ&A) Section
+        $IntakeFormQuestions =  new IntakeFormQuestions($_SESSION['clientID']);
+        $instancesID = null;
+
+        // Find intakeFormInstances.caseID = cases.id or move along
+        if ((int)$_SESSION['currentCaseID'] > 0) {
+            $instancesID = $IntakeFormQuestions->getInstanceIdByCaseId($_SESSION['currentCaseID']);
+        }
+
+        if ($instancesID) {
+
+            // find eQ&A
+            $sectionID = 4;  // 4 === 'Business Practices'
+            $cfg = $IntakeFormQuestions->getCfgByInstanceId($instancesID);
+            $intakeFormCfgID = $cfg['intakeFormCfgID'];
+            $languageCode = $cfg['languageCode'];
+            $eqa = $IntakeFormQuestions->getExtensionsBySectionID($sectionID, $intakeFormCfgID, $languageCode, $instancesID);
+
+            // Display eQ&A
+            if ($eqa && $eqa[0]) {
+              echo( "<tr>" );
+              echo( "<td colspan=\"2\">" );
+              echo( "<div style=\"margin-top:1em;\"><b>Extended Question & Answers</b></div></td>" );
+              echo( "</tr>" );
+              echo( "<tr><td colspan=\"2\"><div class=\"tblrule\">&nbsp;</div></td></tr>" );
+
+              $IntakeFormQuestions->display3PM($eqa);
+          }
+      }
+
+
+echo( "</table>" );
+?>
+
+
+</form>
+<?php
+  // End of ddq4 Page
+  // Make sure the question array is cleaned out in prep for next page
+  $_SESSION['aOnlineQuestions'] = [];
+  unset( $_SESSION['aOnlineQuestions'] );
+?>
+
+
+<!--End Center Content-->

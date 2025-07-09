@@ -1,0 +1,190 @@
+<?php
+/**
+ * AJAX handler for case log. Also provide data for PDF
+ *
+ * @keywords audit
+ */
+
+if (defined('IN_SPL_PDF')) {
+    // prevent direct access
+    if (realpath($_SERVER['SCRIPT_FILENAME']) == __FILE__) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            return;
+        } else {
+            exit;
+        }
+    }
+    include_once __DIR__ . '/../../includes/php/'.'class_access.php';
+    $accCls = UserAccess::getInstance();
+    $isVendor = true;
+
+} else {
+    include_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+    $session->cms_logged_in(true, -1);
+    include_once __DIR__ . '/../../includes/php/'.'class_access.php';
+    $accCls = UserAccess::getInstance();
+    if (!$accCls->allow('accCaseLog')) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            echo 'Access denied.';
+            return;
+        } else {
+            exit('Access denied.');
+        }
+    }
+    $clientID = $_SESSION['clientID'];
+    $caseID = $_SESSION['currentCaseID'];
+    $globaldb = GLOBAL_DB;
+    $isVendor = ($session->secure_value('userClass') == 'vendor');
+    $userClass =$session->secure_value('userClass');
+    include_once __DIR__ . '/../../includes/php/'.'funcs_cases.php';
+    if ( !$caseID
+        || !($caseRow = fGetCaseRow($caseID))
+        || !$session->value('IN_CASE_HOME')
+    ) {
+        return;
+    }
+
+    include_once __DIR__ . '/../../includes/php/'.'class_db.php';
+
+    $dbCls->open();
+
+    $splPDF = false;
+    if (!isset($toPDF)) {
+        $toPDF = false;
+    }
+
+
+}
+
+$e_clientID = intval($clientID);
+$e_caseID = intval($caseID);
+
+$globalsp = GLOBAL_SP_DB;
+require_once __DIR__ . '/../../includes/php/'.'funcs_users.php';
+require_once __DIR__ . '/../../includes/php/'.'funcs_misc.php';
+require_once __DIR__ . '/../../includes/php/'.'funcs_log.php';
+
+$userType = intval($_SESSION['userType']);
+$logTbl = 'userLog';
+$logTblDb = 'ul';
+$userRole = getUserRole($userType);
+$userRoleID = (array_key_exists('id', $userRole) ? $userRole['id'] : 0);
+$userRoleName = (array_key_exists('name', $userRole) ? $userRole['name'] : 'client');
+$contextID = getContextID('caseFolder');
+$where = "WHERE {$logTblDb}.caseID='$e_caseID' "
+    . "AND {$logTblDb}.clientID = '$e_clientID' AND "
+    . auditLogBaseWhere($contextID, $userRoleID) . "\n";
+$joins = auditLogBaseJoins($logTblDb);
+
+if (!isset($si)) {
+    $si = '';
+}
+if (!isset($sortAlias)) {
+    $sortAlias = '';
+}
+if (!isset($pg)) {
+    $pg = '';
+}
+
+$sql = "SELECT COUNT(1) AS cnt FROM {$logTbl} AS {$logTblDb} " . $joins . $where;
+$cnt = $dbCls->fetchValue($sql);
+if (!$toPDF) {
+    $sortAlias = 'dt';
+    $minPP = 15;
+    $maxPP = 100;
+    $si = intval($_GET['si']);
+    $pp = intval($_GET['pp']);
+    if (in_array($_GET['sort'], ['dt', 'un', 'ev'])) {
+        $sortAlias = $_GET['sort'];
+    }
+    $sortDir = ($_GET['dir'] == 'yui-dt-desc') ? 'yui-dt-desc' : 'yui-dt-asc';
+    if ($pp < $minPP) {
+        $pp = $minPP;
+    } elseif ($pp > $maxPP) {
+        $pp = $maxPP;
+    }
+
+    // Calculate page (base 1), and validate startIndex (base 0)
+    if (!$cnt) {
+        $pg = 1;
+        $si = 0;
+    } else {
+        if ($si >= $cnt) {
+            $si = $cnt - 1;
+        }
+
+        $t = $si + 1;
+        $t -= ($si % $pp);
+        $si = $t - 1;
+        $pg = ($si / $pp) + 1;
+    }
+    if ($si < 0) {
+        $si = 0;
+    }
+
+}
+if (!isset($pp)) {
+    $pp = '';
+}
+if (!$cnt) {
+    $cnt = '0';
+}
+$sortDir = strtoupper((($sortDir == 'yui-dt-asc') ? 'ASC': 'DESC'));
+if (!$splPDF) {
+    $sessKey = 'caseLogSticky';
+    if (isset($sortAlias) && $sortAlias == 'dt') {
+        $_SESSION[$sessKey]['dtDir'] = $dtDir = $sortDir;
+    } else {
+        if (isset($_SESSION[$sessKey]['dtDir'])) {
+            $dtDir = $_SESSION[$sessKey]['dtDir'];
+        } else {
+            $dtDir = 'DESC';
+        }
+    }
+} else {
+    $dtDir = 'DESC';
+}
+
+$rows = [];
+if ($cnt > 0) {
+    $clientDB = $dbCls->clientDBname($e_clientID);
+    $sqlConfig = ['toPDF' => $toPDF, 'limit' => " LIMIT $si, $pp", 'sortCol' => getSortCol($sortAlias), 'sortDir' => $sortDir, 'logTbl' => $logTbl, 'logTblDb' => $logTblDb, 'clientID' => $e_clientID, 'clientDB' => $clientDB, 'caseID' => $e_caseID, 'contextID' => $contextID, 'userRoleID' => $userRoleID, 'userRoleName' => $userRoleName];
+    $sql = caseFldrAuditLogSQL($sqlConfig);
+    $rows = $dbCls->fetchObjectRows($sql);
+}
+
+if ($toPDF) {
+    $caselogData = (string)json_encodeLF((array)$rows);
+    if (empty($caselogData)) {
+        $caselogData = [];
+    }
+    echo <<<EOT
+<script type="text/javascript">
+YAHOO.namespace('cfData');
+YAHOO.cfData.caselogData = $caselogData;
+</script>
+
+EOT;
+
+} else {
+    $jsObj = new stdClass();
+    $jsObj->Response = new stdClass();
+    $jsObj->Response->Records = $rows;
+    $jsObj->Response->RecordOffset = $si;
+    $jsObj->Response->Total = $cnt;
+    $jsObj->Response->Page = $pg;
+    $jsObj->Response->RowsPerPage = $pp;
+    // Override normal headers to values more favorable to a JSON return value
+    header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+    header("Last-Modified: " . gmdate("D, d M Y H:i:s") . "GMT");
+    header("Cache-Control: no-cache, must-revalidate");
+    header("Pragma: no-cache");
+    header("Content-Type: text/plain; charset=utf-8"); //JSON
+    echo json_encodeLF((array)$jsObj);
+}
+
+?>

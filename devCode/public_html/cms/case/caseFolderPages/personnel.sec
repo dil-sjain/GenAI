@@ -1,0 +1,1172 @@
+<?php
+require_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(TRUE, -1);
+require_once __DIR__ . '/../../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+if (!$accCls->allow('accCasePersonnel'))
+    exit('Access denied');
+require_once __DIR__ . '/../../includes/php/'."funcs.php";
+// Check for login/Security
+fchkUser( "casehome" );
+require_once __DIR__ . '/../../includes/php/'."ddq_funcs.php";
+require_once __DIR__ . '/../../includes/php/'."country_state_ddl.php";
+include_once __DIR__ . '/../../includes/php/'.'Models/TPM/IntakeForms/IntakeFormKeyPersons.php';
+include_once __DIR__ . '/../../includes/php/'.'Models/TPM/IntakeForms/IntakeFormQuestions.php';
+
+$_GET['id'] = intval($_GET['id']);
+
+if (!($caseRow = fGetCaseRow($_GET['id'])) ) {
+    // The following prevents this condition from
+    // breaking PDF rendering
+    if (isset($toPDF) && $toPDF) {
+        return;
+    }
+    else {
+        exit;
+    }
+}
+
+function fListInvestigatedPrincipals($caseType=null)
+{
+    $subjectInfoDDRow = fGetSubInfoDDRow( $_GET['id'] );
+    $principal1 = $subjectInfoDDRow[21];
+    $principal2 = $subjectInfoDDRow[22];
+    $principal3 = $subjectInfoDDRow[23];
+    $principal4 = $subjectInfoDDRow[24];
+    $pRelationship1 = $subjectInfoDDRow[26];
+    $pRelationship2 = $subjectInfoDDRow[27];
+    $pRelationship3 = $subjectInfoDDRow[28];
+    $pRelationship4 = $subjectInfoDDRow[29];
+    $SBIonPrincipals = $subjectInfoDDRow[30];
+    $bp1Owner = $subjectInfoDDRow[33];
+    $p1OwnPercent = $subjectInfoDDRow[34];
+    $bp1KeyMgr = $subjectInfoDDRow[35];
+    $bp1BoardMem = $subjectInfoDDRow[36];
+    $bp1KeyConsult = $subjectInfoDDRow[37];
+    $bp1Unknown = $subjectInfoDDRow[38];
+    $bp2Owner = $subjectInfoDDRow[39];
+    $p2OwnPercent = $subjectInfoDDRow[40];
+    $bp2KeyMgr = $subjectInfoDDRow[41];
+    $bp2BoardMem = $subjectInfoDDRow[42];
+    $bp2KeyConsult = $subjectInfoDDRow[43];
+    $bp2Unknown = $subjectInfoDDRow[44];
+    $bp3Owner = $subjectInfoDDRow[45];
+    $p3OwnPercent = $subjectInfoDDRow[46];
+    $bp3KeyMgr = $subjectInfoDDRow[47];
+    $bp3BoardMem = $subjectInfoDDRow[48];
+    $bp3KeyConsult = $subjectInfoDDRow[49];
+    $bp3Unknown = $subjectInfoDDRow[50];
+    $bp4Owner = $subjectInfoDDRow[51];
+    $p4OwnPercent = $subjectInfoDDRow[52];
+    $bp4KeyMgr = $subjectInfoDDRow[53];
+    $bp4BoardMem = $subjectInfoDDRow[54];
+    $bp4KeyConsult = $subjectInfoDDRow[55];
+    $bp4Unknown = $subjectInfoDDRow[56];
+
+    $principal5 = $subjectInfoDDRow[66];
+    $pRelationship5 = $subjectInfoDDRow[67];
+    $bp5Owner = $subjectInfoDDRow[68];
+    $p5OwnPercent = $subjectInfoDDRow[69];
+    $bp5KeyMgr = $subjectInfoDDRow[70];
+    $bp5BoardMem = $subjectInfoDDRow[71];
+    $bp5KeyConsult = $subjectInfoDDRow[72];
+    $bp5Unknown = $subjectInfoDDRow[73];
+
+    $principal6 = $subjectInfoDDRow[76];
+    $pRelationship6 = $subjectInfoDDRow[77];
+    $bp6Owner = $subjectInfoDDRow[78];
+    $p6OwnPercent = $subjectInfoDDRow[79];
+    $bp6KeyMgr = $subjectInfoDDRow[80];
+    $bp6BoardMem = $subjectInfoDDRow[81];
+    $bp6KeyConsult = $subjectInfoDDRow[82];
+    $bp6Unknown = $subjectInfoDDRow[83];
+
+    $principal7 = $subjectInfoDDRow[86];
+    $pRelationship7 = $subjectInfoDDRow[87];
+    $bp7Owner = $subjectInfoDDRow[88];
+    $p7OwnPercent = $subjectInfoDDRow[89];
+    $bp7KeyMgr = $subjectInfoDDRow[90];
+    $bp7BoardMem = $subjectInfoDDRow[91];
+    $bp7KeyConsult = $subjectInfoDDRow[92];
+    $bp7Unknown = $subjectInfoDDRow[93];
+
+    $principal8 = $subjectInfoDDRow[96];
+    $pRelationship8 = $subjectInfoDDRow[97];
+    $bp8Owner = $subjectInfoDDRow[98];
+    $p8OwnPercent = $subjectInfoDDRow[99];
+    $bp8KeyMgr = $subjectInfoDDRow[100];
+    $bp8BoardMem = $subjectInfoDDRow[101];
+    $bp8KeyConsult = $subjectInfoDDRow[102];
+    $bp8Unknown = $subjectInfoDDRow[103];
+
+    $principal9 = $subjectInfoDDRow[106];
+    $pRelationship9 = $subjectInfoDDRow[107];
+    $bp9Owner = $subjectInfoDDRow[108];
+    $p9OwnPercent = $subjectInfoDDRow[109];
+    $bp9KeyMgr = $subjectInfoDDRow[110];
+    $bp9BoardMem = $subjectInfoDDRow[111];
+    $bp9KeyConsult = $subjectInfoDDRow[112];
+    $bp9Unknown = $subjectInfoDDRow[113];
+
+    $principal10 = $subjectInfoDDRow[116];
+    $pRelationship10 = $subjectInfoDDRow[117];
+    $bp10Owner = $subjectInfoDDRow[118];
+    $p10OwnPercent = $subjectInfoDDRow[119];
+    $bp10KeyMgr = $subjectInfoDDRow[120];
+    $bp10BoardMem = $subjectInfoDDRow[121];
+    $bp10KeyConsult = $subjectInfoDDRow[122];
+    $bp10Unknown = $subjectInfoDDRow[123];
+
+    // Let's get the user defined investigation type name
+    if ($caseType == DUE_DILIGENCE_OSIPDF || $caseType == DUE_DILIGENCE_EDDPDF) {
+        if ($SBIonPrincipals == 'Yes') {
+            $caseTypePrinc = DUE_DILIGENCE_EDDPDF;
+        } else {
+            $caseTypePrinc = DUE_DILIGENCE_OSIPDF;
+        }
+    } else {
+        if ($SBIonPrincipals == 'Yes') {
+            $caseTypePrinc = DUE_DILIGENCE_SBI;
+        } else {
+            $caseTypePrinc = DUE_DILIGENCE_IBI;
+        }
+    }
+
+    $caseTypeClientRow = fGetCaseTypeClient( $_SESSION['clientID'], $caseTypePrinc );
+
+    // Check for the principal and then build a row to display the information
+    if (strlen((string) $principal1)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp1Owner) {
+            $szRoles.= "Owner with ";
+            if ($p1OwnPercent) {
+                $szRoles .= " $p1OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp1KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp1BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp1KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp1Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal1</td>" // Name
+            . "<td class='no-trsl'>$pRelationship1</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal2)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp2Owner) {
+            $szRoles.= "Owner with ";
+            if ($p2OwnPercent) {
+                $szRoles .= " $p2OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp2KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp2BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp2KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp2Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal2</td>" // Name
+            . "<td class='no-trsl'>$pRelationship2</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal3)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp3Owner) {
+            $szRoles.= "Owner with ";
+            if ($p3OwnPercent) {
+                $szRoles .= " $p3OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp3KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp3BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp3KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp3Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal3</td>" // Name
+            . "<td class='no-trsl'>$pRelationship3</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal4)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp4Owner) {
+            $szRoles.= "Owner with ";
+            if ($p4OwnPercent) {
+                $szRoles .= " $p4OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp4KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp4BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp4KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp4Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal4</td>" // Name
+            . "<td class='no-trsl'>$pRelationship4</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+
+    if (strlen((string) $principal5)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp5Owner) {
+            $szRoles.= "Owner with ";
+            if ($p5OwnPercent) {
+                $szRoles .= " $p5OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp5KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp5BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp5KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp5Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal5</td>" // Name
+            . "<td class='no-trsl'>$pRelationship5</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal6)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp6Owner) {
+            $szRoles.= "Owner with ";
+            if ($p6OwnPercent) {
+                $szRoles .= " $p6OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp6KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp6BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp6KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp6Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal6</td>" // Name
+            . "<td class='no-trsl'>$pRelationship6</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal7)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp7Owner) {
+            $szRoles.= "Owner with ";
+            if ($p7OwnPercent) {
+                $szRoles .= " $p7OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp7KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp7BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp7KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp7Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal7</td>" // Name
+            . "<td class='no-trsl'>$pRelationship7</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal8)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp8Owner) {
+            $szRoles.= "Owner with ";
+            if ($p8OwnPercent) {
+                $szRoles .= " $p8OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp8KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp8BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp8KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp8Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal8</td>" // Name
+            . "<td class='no-trsl'>$pRelationship8</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal9)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp9Owner) {
+            $szRoles.= "Owner with ";
+            if ($p9OwnPercent) {
+                $szRoles .= " $p9OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp9KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp9BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp9KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp9Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal9</td>" // Name
+            . "<td class='no-trsl'>$pRelationship9</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+
+    if (strlen((string) $principal10)) {
+        // Build a string w/the principal's role(s) in the company
+        $szRoles = '';
+        if ($bp10Owner) {
+            $szRoles.= "Owner with ";
+            if ($p10OwnPercent) {
+                $szRoles .= " $p10OwnPercent" . "%,";
+            } else {
+                $szRoles .= " Unverified" . "%,";
+            }
+        }
+        if ($bp10KeyMgr) {
+            $szRoles .= " Key Manager,";
+        }
+        if ($bp10BoardMem) {
+            $szRoles .= " Board Member,";
+        }
+        if ($bp10KeyConsult) {
+            $szRoles .= " Key Consultant,";
+        }
+        if ($bp10Unknown || !strlen($szRoles)) {
+            $szRoles .= " Unknown";
+        } else {
+            $i = strlen($szRoles);
+            $szRoles[$i-1] = ' ';
+        }
+        echo "<tr>"
+            . "<td class='no-trsl'>$principal10</td>" // Name
+            . "<td class='no-trsl'>$pRelationship10</td>" // Position
+            . "<td>$caseTypeClientRow[1]</td>" // Type of Investigation
+            . "<td class='no-trsl'>$szRoles</td>" // Role in company
+            . "</tr>";
+    }
+}
+
+?>
+<table border="0" cellspacing="0" cellpadding="0" class="full-width">
+<tr>
+<td colspan="2" align="left" valign="top" height="15">
+<form action="ddq3.php" method="post" name="ddqform" class="cmsform" id="ddqform">
+<p></p>
+<?php
+$ddqCanAddPrin = [
+    DUE_DILIGENCE_SBI,
+    DDQ_SBI_FORM2,
+    DDQ_SBI_FORM3,
+    DDQ_SBI_FORM4,
+    DUE_DILIGENCE_SBI_RENEWAL,
+    DUE_DILIGENCE_SBI_RENEWAL_2,
+    DDQ_SBI_FORM2_RENEWAL,
+    DDQ_SBI_FORM3_RENEWAL,
+    DDQ_SBI_FORM4_RENEWAL,
+    DUE_DILIGENCE_SHORTFORM,
+    DDQ_SHORTFORM_5PAGENOBP,
+    DDQ_5PAGENOBP_FORM2,
+    DDQ_5PAGENOBP_FORM3,
+    DDQ_4PAGE_FORM1,
+    DDQ_4PAGE_FORM2,
+    DDQ_SHORTFORM_3PAGECDKPACL1,
+    DDQ_SHORTFORM_3PAGECDKPACL2,
+    DDQ_SBI_FORM5,
+    DDQ_SBI_FORM6,
+    DDQ_SBI_FORM7,
+    DDQ_SBI_FORM5_RENEWAL,
+    DDQ_SBI_FORM6_RENEWAL,
+    DDQ_SBI_FORM7_RENEWAL,
+    DDQ_OSI_FORM,
+];
+$allowAddKeyPerson = (($caseRow[9] == QUALIFICATION || $caseRow[9] == UNASSIGNED)
+    && (isset($_SESSION['ddqRow'][107]) && in_array($_SESSION['ddqRow'][107], $ddqCanAddPrin))
+    && (!$accCls->allow('noAddPrincipal'))
+);
+if ($allowAddKeyPerson) {
+    if (!isset($toPDF)) {
+        ?>
+        <p>
+        <table width="767" border="0" cellspacing="0">
+        <tr>
+        <td width="614">&nbsp;</td>
+        <td width="149">
+        <button onClick="return GB_showPage('editddq_keyperson.php');" class="btn btn-light" type="button">Add Key Person</button>
+        </td>
+        </tr>
+        </table>
+        </p>
+        <?php
+    }
+}
+?>
+<p><b>PRINCIPALS INVESTIGATED</b><br />
+<em>Key Personnel within the company that were selected for investigation. </em></p>
+<?php
+$IntakeFormKeyPersons =  new IntakeFormKeyPersons($_SESSION['clientID']);
+if ($overrides = $IntakeFormKeyPersons->getOverridesByCaseID($_GET['id'])) {
+    $content = '';
+    foreach ($overrides as $type => $typeOverrides) {
+        $content .= "<p><strong>{$type}</strong></p>"
+            . '<div id="tableHoldDivBlueCseFolder">'
+            . '<table cellspacing="0" id="myTable" class="fixTable">';
+        foreach ($typeOverrides as $idx => $override) {
+            $content .= '<tr>';
+            if (empty($idx)) { // If the first row, gather the cols for headers
+                $iterator = 0;
+                foreach ($override as $col => $val) {
+                    if ($iterator == 4) {
+                        break;
+                    }
+                    $content .= '<th align="left" scope="col">' . $col . '</th>';
+                    $iterator++;
+                }
+                $content .= '</tr>';
+            }
+            $content .= '<tr>';
+            $iterator = 0;
+            foreach ($override as $col => $val) {
+                if ($iterator == 4) {
+                    break;
+                }
+                $content .= '<td class="no-trsl">' . $val . '</th>';
+                $iterator++;
+            }
+            $content .= '</tr>';
+        }
+        $content .= '</table></div><p>&nbsp;</p>';
+    }
+    echo $content;
+} else {
+    ?>
+    <div id="tableHoldDivBlueCseFolder">
+    <table cellspacing="0" id="myTable" class="fixTable">
+    <tr>
+    <th align="left" scope="col">Name</th>
+    <th align="left" scope="col">Position</th>
+    <th align="left" scope="col">Type</th>
+    <th align="left" scope="col">Role in Company</th>
+    </tr>
+    <?php fListInvestigatedPrincipals($caseRow[3]); ?>
+    </table>
+    </div>
+    <p>&nbsp;</p>
+
+    <?php
+    $hasPersonnel = getAssignedPageTabs(
+        $_SESSION['bDDQcreated'],
+        $_SESSION['clientID'],
+        ($_SESSION['ddqRow']['caseType'] ?? 0),
+        ($_SESSION['ddqRow']['ddqQuestionVer'] ?? ''),
+        'EN_US',
+        'personnel'
+    );
+
+    if (($_SESSION['bDDQcreated'] ?? false)
+        && ((isset($_SESSION['ddqRow'][107]) && $_SESSION['ddqRow'][107] != DUE_DILIGENCE_SHORTFORM) || $hasPersonnel)
+    ) {
+        // Make sure our Content and Control lines are clean
+        $_SESSION['CNC']['baRemoveOwnershipList'] = [];
+        $_SESSION['CNC']['baRemoveBoardOfDirList'] = [];
+        $_SESSION['CNC']['baRemoveKeyManagementList'] = [];
+        $_SESSION['CNC']['baRemoveKeyConsultantList'] = [];
+        $_SESSION['CNC']['baRequireKeyPerson'] = [];
+
+        $_SESSION['CNC']['bRmNameCol'] = 0;
+        $_SESSION['CNC']['bRmPositionCol'] = 0;
+        $_SESSION['CNC']['bRmAddressCol'] = 0;
+        $_SESSION['CNC']['bRmNationalityCol'] = 0;
+        $_SESSION['CNC']['bRmIDCol'] = 0;
+        $_SESSION['CNC']['bRmOwnershipCol'] = 0;
+        $_SESSION['CNC']['bRmEmbargoedResCol'] = 0;
+        $_SESSION['CNC']['bRmProposedRoleCol'] = 0;
+
+        // We need to load the  page questions from onlineQuestions
+        $_SESSION['aOnlineQuestions'] = foqLoadCompletePage(
+            $_SESSION['clientID'],
+            $_SESSION['languageCode'],
+            $_SESSION['ddqRow'][107],
+            'Personnel',
+            $_SESSION['ddqID']
+        );
+        // Check for removed lists
+        $_SESSION['CNC']['baRemoveOwnershipList'] = foqGetQRowFromPage(
+            $_SESSION['aOnlineQuestions'],
+            'CMD_RM_OWNERSHIP_LIST'
+        );
+        $_SESSION['CNC']['baRemoveBoardOfDirList'] = foqGetQRowFromPage(
+            $_SESSION['aOnlineQuestions'],
+            'CMD_RM_BOARDOFDIR_LIST'
+        );
+        $_SESSION['CNC']['baRemoveKeyManagementList'] = foqGetQRowFromPage(
+            $_SESSION['aOnlineQuestions'],
+            'CMD_RM_KEYMANAGEMENT_LIST'
+        );
+        $_SESSION['CNC']['baRemoveKeyConsultantList'] = foqGetQRowFromPage(
+            $_SESSION['aOnlineQuestions'],
+            'CMD_RM_KEYCONSULTANT_LIST'
+        );
+
+        // Check for any columns being removed
+        //  $_SESSION['CNC']['bRmPositionCol'] = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'],
+        //      'CMD_RM_POSITION_COL' );
+        if ($aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'CMD_RM_ADDRESS_COL')) {
+            $_SESSION['CNC']['bRmAddressCol'] = 1;
+        }
+        if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'CMD_RM_NATION_COL')) {
+            $_SESSION['CNC']['bRmNationalityCol'] = 1;
+        }
+        if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'CMD_RM_ID_COL')) {
+                $_SESSION['CNC']['bRmIDCol'] = 1;
+        }
+        //  $_SESSION['CNC']['bRmOwnershipCol'] = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'],
+        //      'CMD_RM_OWNERSHIP_COL' );
+        if ($aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'CMD_RM_EMBARGOEDRES_COL')) {
+            $_SESSION['CNC']['bRmEmbargoedResCol'] = 1;
+        }
+        if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'CMD_RM_PROPOSEDROLE_COL')) {
+            $_SESSION['CNC']['bRmProposedRoleCol'] = 1;
+        }
+
+
+        // Lets load all of the column headings
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_NAME_COL');
+        $szName = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_POSITION_COL');
+        $szPosition = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_ADDRESS_COL');
+        $szAddress = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_NATION_COL');
+        $szNationality = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_ID_COL');
+        $szID = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_OWNERSHIP_COL');
+        $szOwnership = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_EMBARGOEDRES_COL');
+        $szEmbargoedRes = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+
+        $aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_PROPOSEDROLE_COL');
+        $szProposedRole = empty($aQuestionRow[5]) ? "" : $aQuestionRow[5];
+        $caseType = $_SESSION['ddqRow'][107];
+        $showKpFields = ['position' => showKeyPersonField('showPosition', $_SESSION['clientID'], $caseType), 'address' => showKeyPersonField('showAddress', $_SESSION['clientID'], $caseType), 'nationality' => showKeyPersonField('showNationality', $_SESSION['clientID'], $caseType), 'idnum' => showKeyPersonField('showIdNum', $_SESSION['clientID'], $caseType), 'proposedRole' => showKeyPersonField('showProposedRole', $_SESSION['clientID'], $caseType), 'embargoQuestion' => showKeyPersonField('showEmbargoQuestion', $_SESSION['clientID'], $caseType)];
+
+        $emailColHead = $accCls->trans->codeKey('kp_lbl_email');
+
+        if (!($_SESSION['CNC']['baRemoveOwnershipList']) && $_SESSION['clientID'] != HILTON_CLIENTID) {
+            if ($aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'TEXT_OWNERSHIP_LIST')) {
+                echo "<br/><b>$aQuestionRow[5]</b>";
+            }
+            // UI portion for User has indicated that no other owners (Individual or Entity) own x% or more.
+            if ($aQuestionRow = foqGetQRowFromPage($_SESSION['aOnlineQuestions'], 'CMD_PCTOWNRTRESH_ACCEPTBOX')) {
+                $percentOwnershipThreshold = $aQuestionRow[5];
+                ?>
+                <div style="margin: 5px 0 5px 0">
+                <span style="color: #e74c3c; font-weight: bold"><?php echo $percentOwnershipThreshold ?></span>
+                </div>
+                <?php
+            }
+            ?>
+            <div id="tableHoldDivBlueCseFolder">
+            <table cellspacing="0" id="myTable" class="fixTable">
+            <tr>
+            <?php
+            if (((in_array($_SESSION['clientID'], HP_ALL)) && ($_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL_2))
+            ) {
+                ?>
+                <th align="left" scope="col"><?php echo $szName;?></th>
+                <th scope="col" style="padding-right:20px;"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?><th align="left" scope="col"><?php echo $szPosition;?></th><?php
+                }
+                if ($showKpFields['address']) {
+                    ?><th align="left" scope="col"><?php echo $szAddress;?></th><?php
+                }
+                ?>
+                <th align="left" scope="col">Phone</th>
+                <th align="left" scope="col"><?php echo $szOwnership;?></th>
+                <?php
+            } else {
+                ?>
+                <th align="left" scope="col"><?php echo $szName;?></th>
+                <th scope="col" style="padding-right:20px;"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szPosition;?></th>
+                    <?php
+                }
+                if ($_SESSION['clientID'] != VISAQC_CLIENTID && $_SESSION['clientID'] != VISA_CLIENTID &&
+                    $_SESSION['clientID'] != EATON_CLIENTID && $showKpFields['address']
+                ) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szAddress; ?></th>
+                    <?php
+                }
+                if ($_SESSION['clientID'] != VISAQC_CLIENTID && $_SESSION['clientID'] != VISA_CLIENTID) {
+                    if ($showKpFields['nationality']) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szNationality; ?></th>
+                        <?php
+                        if ($_SESSION['clientID'] != COKE_CLIENTID && $_SESSION['clientID'] != GP_CLIENTID
+                            && $_SESSION['clientID'] != DJO_CLIENTID && $_SESSION['clientID'] != EATON_CLIENTID
+                            && $_SESSION['clientID'] != BERGER_CLIENTID
+                            && $_SESSION['clientID'] != LILLY_CLIENTID
+                            && $showKpFields['idnum']
+                        ) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szID; ?></th>
+                            <?php
+                        }
+                    } else {
+                        if ($showKpFields['idnum']) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szID; ?></th>
+                            <?php
+                        }
+                    }
+                }
+                ?>
+                <th align="left" scope="col"><?php echo $szOwnership; ?></th>
+                <?php
+                if (($_SESSION['clientID'] != GP_CLIENTID)
+                    && $_SESSION['clientID'] != VISAQC_CLIENTID && $_SESSION['clientID'] != VISA_CLIENTID
+                    && $_SESSION['clientID'] != LILLY_CLIENTID
+                )  {
+                    if ($_SESSION['clientID'] != DJO_CLIENTID && $_SESSION['clientID'] != EATON_CLIENTID
+                        && $_SESSION['clientID'] != BERGER_CLIENTID
+                        && $_SESSION['clientID'] != TE_CLIENTID
+                        && $showKpFields['embargoQuestion']
+                    ) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szEmbargoedRes; ?></th>
+                        <?php
+                    }
+                    if ($_SESSION['clientID'] != DOW_CLIENTID && $_SESSION['clientID'] != LIFETECH_CLIENTID
+                        && $_SESSION['clientID'] != EATON_CLIENTID && $showKpFields['proposedRole']
+                    ) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szProposedRole; ?></th>
+                        <?php
+                    }
+                }
+            }
+            ?>
+            </tr>
+            <?php
+            fGetKeyPerson( 'Owner', $_SESSION['ddqRow'][0], 0, $showKpFields );
+            ?>
+            </table>
+            </div>
+            <?php
+        }
+
+        if (!($_SESSION['CNC']['baRemoveBoardOfDirList']) && ($_SESSION['clientID'] != DOW_CLIENTID)
+            && ($_SESSION['clientID'] != LIFETECH_CLIENTID)
+            && ($_SESSION['clientID'] != HILTON_CLIENTID)
+        ) {
+            if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_BOARDOFDIR_LIST')) {
+                echo "<br/><b>$aQuestionRow[5]</b>";
+            } else {
+                echo "";
+            }
+            ?>
+            <div id="tableHoldDivBlueCseFolder">
+            <table cellspacing="0" id="myTable" class="fixTable">
+            <tr>
+            <?php
+            if (((in_array($_SESSION['clientID'], HP_ALL)) && ($_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL_2))
+            ) {
+                ?>
+                <th align="left" scope="col"><?php echo $szName; ?></th>
+                <th scope="col" style="padding-right:20px;"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szPosition; ?></th>
+                    <?php
+                }
+                if ($showKpFields['address']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szAddress; ?></th>
+                    <?php
+                }
+                ?>
+                <th align="left" scope="col">Phone</th>
+                <?php
+            } else {
+                ?>
+                <th align="left" scope="col"><?php echo $szName; ?></th>
+                <th scope="col" style="padding-right:20px;"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szPosition; ?></th>
+                    <?php
+                }
+                if ($_SESSION['clientID'] != VISAQC_CLIENTID && $_SESSION['clientID'] != VISA_CLIENTID) {
+                    if ($_SESSION['clientID'] != EATON_CLIENTID && $showKpFields['address']) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szAddress; ?></th>
+                        <?php
+                    }
+                    if ($showKpFields['nationality']) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szNationality;?></th>
+                        <?php
+                    }
+                    if ($_SESSION['clientID'] != COKE_CLIENTID && $_SESSION['clientID'] != GP_CLIENTID
+                        && $_SESSION['clientID'] != DJO_CLIENTID
+                        && $_SESSION['clientID'] != EATON_CLIENTID
+                        && $_SESSION['clientID'] != BERGER_CLIENTID
+                        && $_SESSION['clientID'] != LILLY_CLIENTID
+                        && $showKpFields['idnum']
+                    ) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szID; ?></th>
+                        <?php
+                    }
+                    if ($_SESSION['clientID'] != GP_CLIENTID && $_SESSION['clientID'] != EATON_CLIENTID
+                        && $_SESSION['clientID'] != LILLY_CLIENTID
+                    ) {
+                        if ($_SESSION['clientID'] != DJO_CLIENTID
+                            && $_SESSION['clientID'] != BERGER_CLIENTID
+                            && $_SESSION['clientID'] != TE_CLIENTID
+                            && $showKpFields['embargoQuestion']
+                        ) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szEmbargoedRes; ?></th>
+                            <?php
+                        }
+                        if ($_SESSION['clientID'] != EATON_CLIENTID && $showKpFields['proposedRole']) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szProposedRole; ?></th>
+                            <?php
+                        }
+                    }
+                }
+            }
+            ?>
+            </tr>
+            <?php
+            fGetKeyPerson('BoardMem', $_SESSION['ddqRow'][0], 0, $showKpFields);
+            ?>
+            </table>
+            </div>
+            <?php
+        }
+
+        if (!$_SESSION['CNC']['baRemoveKeyManagementList'] && $_SESSION['clientID'] != GP_CLIENTID) {
+            $szClientName = safeGetSessVar('szClientName');
+            if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_KEYMANAGEMENT_LIST' )) {
+                echo "<br/><b>$aQuestionRow[5]</b>";
+            }
+            ?>
+            <div id="tableHoldDivBlueCseFolder">
+            <table cellspacing="0" id="myTable" class="fixTable">
+            <tr>
+            <?php
+            if (((in_array($_SESSION['clientID'], HP_ALL)) && ($_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL_2))
+            ) {
+                ?>
+                <th align="left" scope="col"><?php echo $szName; ?></th>
+                <th scope="col" style="padding-right:20px;"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szPosition; ?></th>
+                    <?php
+                }
+                if ($showKpFields['address']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szAddress; ?></th>
+                    <?php
+                }
+                ?>
+                <th align="left" scope="col">Phone</th>
+                <?php
+            } else {
+                ?>
+                <th align="left" scope="col"><?php echo $szName; ?></th>
+                <th scope="col" style="padding-right:20px;"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szPosition; ?></th>
+                    <?php
+                }
+                if ($_SESSION['clientID'] != VISAQC_CLIENTID && $_SESSION['clientID'] != VISA_CLIENTID) {
+                    if ($_SESSION['clientID'] != EATON_CLIENTID && $showKpFields['address']) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szAddress; ?></th>
+                        <?php
+                    }
+                    if ($showKpFields['nationality']) {
+                        ?>
+                        <th align="left" scope="col"><?php echo $szNationality; ?></th>
+                        <?php
+                        if ($_SESSION['clientID'] != COKE_CLIENTID
+                            && $_SESSION['clientID'] != DJO_CLIENTID
+                            && $_SESSION['clientID'] != EATON_CLIENTID
+                            && $_SESSION['clientID'] != BERGER_CLIENTID
+                            && $_SESSION['clientID'] != LILLY_CLIENTID
+                            && $showKpFields['idnum']
+                        ) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szID; ?></th>
+                            <?php
+                        }
+                        if ($_SESSION['clientID'] != DJO_CLIENTID && $_SESSION['clientID'] != EATON_CLIENTID
+                            && $_SESSION['clientID'] != BERGER_CLIENTID
+                            && $_SESSION['clientID'] != LILLY_CLIENTID
+                            && $_SESSION['clientID'] != TE_CLIENTID
+                            && $showKpFields['embargoQuestion']
+                        ) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szEmbargoedRes; ?></th>
+                            <?php
+                        }
+                        if($_SESSION['clientID'] != DOW_CLIENTID && $_SESSION['clientID'] != LIFETECH_CLIENTID
+                            && $_SESSION['clientID'] != EATON_CLIENTID
+                            && $_SESSION['clientID'] != LILLY_CLIENTID
+                            && $showKpFields['proposedRole']
+                        ) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szProposedRole; ?></th>
+                            <?php
+                        }
+                    }
+                }
+            }
+            ?>
+            </tr>
+            <?php
+            fGetKeyPerson('KeyMgr', $_SESSION['ddqRow'][0], 0, $showKpFields);
+            ?>
+            </table>
+            </div>
+            <?php
+        }
+
+        if (!($_SESSION['CNC']['baRemoveKeyConsultantList'])
+            && $_SESSION['clientID'] != DJO_CLIENTID
+            && $_SESSION['clientID'] != LIFETECH_CLIENTID
+            && $_SESSION['clientID'] != EATON_CLIENTID
+            && $_SESSION['clientID'] != SHERWIN_CLIENTID
+            && $_SESSION['clientID'] != GP_CLIENTID
+        ) {
+            if ($aQuestionRow = foqGetQRowFromPage( $_SESSION['aOnlineQuestions'], 'TEXT_KEYCONSULTANT_LIST' )) {
+                echo "<br/><b>$aQuestionRow[5]</b>";
+            }
+            ?>
+            <div id="tableHoldDivBlueCseFolder">
+            <table cellspacing="0" id="myTable" class="fixTable">
+            <tr>
+            <?php
+            if (((in_array($_SESSION['clientID'], HP_ALL)) && ($_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL
+                || $_SESSION['ddqRow'][107] == DUE_DILIGENCE_SBI_RENEWAL_2))
+            ) {
+                ?>
+                <th align="left" scope="col"><?php echo $szName; ?></th>
+                <th scope="col" style="padding-right:20px"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szPosition; ?></th>
+                    <?php
+                }
+                if ($showKpFields['address']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szAddress; ?></th>
+                    <?php
+                }
+                ?>
+                <th align="left" scope="col">Phone</th>
+                <?php
+            } else {
+                ?>
+                <th align="left" scope="col"><?php echo $szName; ?></th>
+                <th scope="col" style="padding-right:20px;"><?php echo $emailColHead; ?></th>
+                <?php
+                if ($showKpFields['position']) {
+                    ?>
+                    <th align="left" scope="col"><?php echo $szPosition; ?></th>
+                    <?php
+                }
+                if ($_SESSION['clientID'] != VISAQC_CLIENTID && $_SESSION['clientID'] != VISA_CLIENTID && $showKpFields['address']) {
+                    ?>
+                    <th scope="col"><?php echo $szAddress; ?></th>
+                    <?php
+                    if ($showKpFields['nationality']) {
+                        ?>
+                        <th scope="col"><?php echo $szNationality; ?></th>
+                        <?php
+                        if ($_SESSION['clientID'] != COKE_CLIENTID
+                            && $_SESSION['clientID'] != LILLY_CLIENTID && $_SESSION['clientID'] != BERGER_CLIENTID
+                            && $showKpFields['idnum']
+                        ) {
+                            ?>
+                            <th scope="col"><?php echo $szID; ?></th>
+                            <?php
+                        }
+                        if ($_SESSION['clientID'] != LILLY_CLIENTID && $_SESSION['clientID'] != BERGER_CLIENTID
+                            && $_SESSION['clientID'] != TE_CLIENTID && $showKpFields['embargoQuestion']
+                        ) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szEmbargoedRes; ?></th>
+                            <?php
+                        }
+                        if ($_SESSION['clientID'] != DOW_CLIENTID && $_SESSION['clientID'] != LILLY_CLIENTID
+                            && $_SESSION['clientID'] != EATON_CLIENTID
+                            && $showKpFields['proposedRole']
+                        ) {
+                            ?>
+                            <th align="left" scope="col"><?php echo $szProposedRole; ?></th>
+                            <?php
+                        }
+                    }
+                }
+            }
+            ?>
+            </tr>
+            <?php
+            fGetKeyPerson('KeyConsult', $_SESSION['ddqRow'][0], 0, $showKpFields);
+            ?>
+            </table>
+            </div>
+            <?php
+        }
+        ?>
+        <p>
+        <!-- This is a Generic Question Section, it won't even show up unless questions have been added for it in onlineQuestions-->
+        <table width="100%" id="main-table"  border="0">
+        <?php
+        // Load up the KEY PERSON GENQUEST Section
+        if ($_SESSION['ddqRow'][107] != DUE_DILIGENCE_SHORTFORM || $hasPersonnel) {
+            foreach ($_SESSION['aOnlineQuestions'] as $aOnlineQuestionsRow) {
+                // Find all of the KEY PERSON GENQUEST Section elements
+                if ($aOnlineQuestionsRow[9] == "KEY PERSON GENQUEST") {
+                    echo "<tr>\n";
+                    foqPrintEchoLabel($aOnlineQuestionsRow, 1, "45%");
+                    foqEchoDDQvalue($aOnlineQuestionsRow, 1, "50%");
+                    echo "</tr>";
+                }
+            }
+        }
+        ?>
+        </table>
+        </p>
+        <?php
+        // Check and see if there is an astrisk in any of the keyPerson's names, if so display the foot note
+        include __DIR__ . '/../../includes/php/'."dbcon.php";
+
+        $e_clientID = intval($_SESSION['clientID']);
+        $e_ddqID = intval($_SESSION['ddqID']);
+        $sql = "SELECT id, kpName FROM `ddqKeyPerson` WHERE `clientID`='$e_clientID' "
+            . "AND `ddqID`='$e_ddqID' AND `kpName` LIKE '% *' ORDER BY kpName ASC";
+        $result = mysqli_query(MmDb::getLink(), $sql);
+        if (!$result) {
+            exitApp(__FILE__, __LINE__, $sql);
+        }
+        if (mysqli_num_rows($result)) {
+            echo "* Key Person was entered manually after receipt from Third Party";
+
+            if ($allowAddKeyPerson) {
+                echo '<p class="fw-bold">Manage Key Persons</p>', PHP_EOL;
+                echo '<table cellpadding="3" cellspacing="0">', PHP_EOL;
+                while ($row = mysqli_fetch_object($result)) {
+                    $dest    = "return GB_showPage('editddq_keyperson.php?id=$row->id')";
+                    $edLink  = '<a href="javascript:void(0)" onclick="' . $dest . '">Edit</a>';
+                    echo "<tr><td>$row->kpName</td><td>$edLink</td></tr>", PHP_EOL;
+                }
+                echo '</table>', PHP_EOL;
+            }
+        }
+        if (is_resource($result)) {
+            mysqli_free_result($result);
+        }
+   }
+}
+
+
+echo "<table width=\"100%\" border=\"0\" cellspacing=\"8\" cellpadding=\"0\">";
+
+// Load up the Extended Question and Answer (eQ&A) Section
+$IntakeFormQuestions =  new IntakeFormQuestions($_SESSION['clientID']);
+$instancesID = null;
+
+// Find intakeFormInstances.caseID = cases.id or move along
+if ((int)$_GET['id'] > 0) {
+    $instancesID = $IntakeFormQuestions->getInstanceIdByCaseId($_GET['id']);
+}
+
+if ($instancesID) {
+    // find eQ&A
+    $sectionID = 3;  // 3 === 'Personnel'
+    $cfg = $IntakeFormQuestions->getCfgByInstanceId($instancesID);
+    $intakeFormCfgID = $cfg['intakeFormCfgID'];
+    $languageCode = $cfg['languageCode'];
+    $eqa = $IntakeFormQuestions->getExtensionsBySectionID($sectionID, $intakeFormCfgID, $languageCode, $instancesID);
+
+    // Display eQ&A
+    if ($eqa && $eqa[0]) {
+        echo "<tr>"
+            . "<td colspan=\"2\">"
+            . "<div style=\"margin-top:1em;\"><b>Extended Question & Answers</b></div></td>"
+            . "</tr>"
+            . "<tr><td colspan=\"2\"><div class=\"tblrule\">&nbsp;</div></td></tr>";
+        $IntakeFormQuestions->display3PM($eqa);
+    }
+}
+
+echo "</table>";
+?>
+</form>
+&nbsp;</td>
+<td width="3">&nbsp;</td>
+</tr>
+</table>

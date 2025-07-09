@@ -1,0 +1,64 @@
+archive:
+  This email was sent to {toEmail}
+accepted:
+  EMsubject: |
+    Investigation Accepted - Case Number: {caseNum}
+  EMbody: |
+    Dear {toName},
+
+    The following investigation has been Accepted:
+      Investigation Company: {iCompany}
+      Investigator: {iName}
+      Case Number: {caseNum}
+      Case Name: {caseName}
+      Case Type: {caseType}
+      Link: {link}
+
+unassigned:
+  EMsubject: |
+    Investigation Rejected - Case Number: {caseNum}
+  EMbody: |
+    Dear {toName},
+
+    The following investigation has been Rejected:
+      Investigation Company: {iCompany}
+      Case Number: {caseNum}
+      Case Name: {caseName}
+      Case Type: {caseType}
+      Link: {link}
+
+    Reason:
+
+    {reason}
+
+completed:
+  EMsubject: |
+    Investigation Complete - Case Number: {caseNum}
+  EMbody: |
+    Dear {toName},
+
+    The following investigation has been Completed:
+      Investigation Company: {iCompany}
+      Investigator: {iName}
+      Case Number: {caseNum}
+      Case Name: {caseName}
+      Case Type: {caseType}
+      Link: {link}
+
+docUploaded:
+  EMsubject: |
+    Document Attached - Case Number: {caseNum}
+  EMbody: |
+    Dear {toName},
+
+    A new document has been attached to your case:
+      Investigation Company: {iCompany}
+      Case Number: {caseNum}
+      Case Name: {caseName}
+      Case Type: {caseType}
+      Link: {link}
+      Document: {fileName}
+
+      Description:
+
+      {fileDesc}

@@ -1,0 +1,583 @@
+<?php
+/**
+ * List case attachments and provide means to add attachment if permitted
+ */
+
+if (defined('IN_SPL_PDF')) {
+    // prevent direct access
+    if (realpath($_SERVER['SCRIPT_FILENAME']) == __FILE__) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            return;
+        }
+        else {
+            exit;
+        }
+    }
+    $canAddCaseDoc = false;
+} else {
+    include_once __DIR__ . '/../../includes/php/'.'cms_defs.php';
+    $session->cms_logged_in(true, -1);
+    include_once __DIR__ . '/../../includes/php/'.'class_access.php';
+    $accCls = UserAccess::getInstance();
+    if (!$accCls->allow('accCaseAttach')) {
+        // The following prevents this condition from
+        // breaking PDF rendering
+        if (isset($toPDF) && $toPDF) {
+            echo 'Access denied.';
+            return;
+        }
+        else {
+            exit('Access denied.');
+        }
+    }
+    include_once __DIR__ . '/../../includes/php/'.'funcs_cases.php';
+    // Validate access and assign $clientID, $caseID and $caseRow
+    if (!isset($_SESSION['currentCaseID'])
+        || !($caseID = $_SESSION['currentCaseID'])
+        || !($clientID = $_SESSION['clientID'])
+        || !($caseRow = fGetCaseRow($caseID))
+    ) {
+        return;
+    }
+    include_once __DIR__ . '/../../includes/php/'.'ddq_funcs.php';
+    include_once __DIR__ . '/../../includes/php/'.'class_db.php';
+
+    $dbCls->open();
+    $splPDF = false;
+    if (!isset($toPDF)) {
+        $toPDF = false;
+    }
+    $canAddCaseDoc = ($_SESSION['userType'] > VENDOR_ADMIN
+        && $_SESSION['userSecLevel'] > READ_ONLY
+        && !$toPDF
+        && $accCls->allow('addCaseAttach')
+    );
+}
+
+
+$addDocBtn = '';
+if ($canAddCaseDoc) {
+    include_once __DIR__ . '/../../includes/php/'.'class_uploadmonitor.php';
+    $jsVar = 'casedocUpl';
+    $casedocUplMon = new UploadParent($jsVar,
+        'case/caseFolderPages/subinfo-attach-inline.sec', 'casedoc'
+    );
+    $addDocBtn = "<div id=\"casedocUpl-btns\" class=\"disp-block\">"
+        . "<button id=\"add-doc-btn\" class=\"v-hidden btn\">Add Document</button></div>";
+}
+
+// Heading
+if (($splPDF && $ddqRow)
+    || (!$splPDF && isset($_SESSION['bDDQcreated']) && $_SESSION['bDDQcreated'])
+) {
+    $ddqAttached = '';
+} else {
+    $attached = $dbCls->fetchValue("SELECT bInfoQuestnrAttach FROM subjectInfoDD "
+        . "WHERE caseID='$caseID' AND clientID = '$clientID' LIMIT 1"
+    );
+    if ($attached != 'Yes') {
+        $attached = 'No';
+    }
+    $ddqAttached = "\n<div style=\"margin-top:.4em;\">Has a Due Diligence "
+        . "Questionnaire been attached? <span "
+        . "style=\"padding-left:.5em;font-weight:bold;\">$attached</span></div>";
+}
+
+echo <<<EOT
+
+<div style="padding:7px;">
+<!-- Begin Center Content -->
+
+<div style="margin:1em 0;">
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr>
+    <td valign="top"><i>This section is an auditable repository for all case-related documents
+        and is viewable by the designated investigator.</i>{$ddqAttached}</td>
+    <td class="ta-right" valign="top">$addDocBtn</td>
+</tr>
+</table>
+</div>
+
+EOT;
+
+$minPP = 15;
+$startIdx = 0;
+$recsPerPage = $minPP;
+$ttlRecs = 0;
+$orderBy = 'fdesc';
+$sortDir = 'yui-dt-asc';
+if ($canAddCaseDoc && !$toPDF) {
+    $casedocUplMon->outputFormDiv();
+    $casedocUplMon->outputOverlay();
+}
+?>
+
+<div id="dtDocsDiv"></div>
+
+<?php
+if (!$toPDF && $accCls->allow('addCaseAttach')) {
+    //Load Edit Attachment Panel
+    include_once __DIR__ . '/../../includes/php/'.'class_editAttach.php';
+    if ($session->secure_value('userClass') == 'vendor') {
+        $editAttach = new EditAttach('spcasedoc', $_SESSION['clientID'], $_SESSION['vendorID']);
+        $editDDQAttach = new EditAttach('ddqdoc', $_SESSION['clientID']);
+    } else {
+        $editAttach = new EditAttach('casedoc', $_SESSION['clientID']);
+        $editDDQAttach = new EditAttach('ddqdoccase', $_SESSION['clientID']);
+    }
+    echo $editAttach->panelDiv();
+    echo $editAttach->panelJs();
+    if (isset($editDDQAttach)) {
+        echo $editDDQAttach->panelDiv();
+        echo $editDDQAttach->panelJs();
+    }
+}
+?>
+
+<!-- End Tab Content -->
+</div>
+
+
+<script type="text/javascript">
+
+<?php
+if ($canAddCaseDoc) {
+    $casedocUplMon->initJsVar();
+    $casedocUplMon->outputMonitor();
+}
+?>
+
+var dtDocsList = null;
+
+(function(){
+    var Dom = YAHOO.util.Dom;
+    var Event = YAHOO.util.Event;
+
+    var dtAllowDel = function(elCell, oRecord, oColumn, oData){
+        var candel = parseInt(oRecord.getData('candel'));
+        var elTd = Dom.getAncestorByClassName(elCell, 'yui-dt-col-del');
+        if (!Dom.hasClass(elCell, 'fas')) {
+            Dom.addClass(elCell, 'fas');
+        }
+        if (candel == 1)
+        {
+            Dom.addClass(elCell, 'fa-trash-alt');
+            elCell.innerHTML = '';
+        }
+        else
+        {
+            Dom.removeClass(elCell, 'fa-trash-alt');
+            elCell.innerHTML = '<span style="padding-right:10px">---</span>';
+        }
+    };
+
+    var dtAllowEdit = function(elCell, oRecord, oColumn, oData){
+        <?php /* Assuming that canedit features are the same as candel */ ?>
+        var canedit = parseInt(oRecord.getData('canedit'));
+        var elTd = Dom.getAncestorByClassName(elCell, 'yui-dt-col-edit');
+        if (!Dom.hasClass(elCell, 'fas')) {
+            Dom.addClass(elCell, 'fas');
+        }
+        if (canedit == 1)
+        {
+            Dom.addClass(elCell, 'fa-pen');
+            elCell.innerHTML = '';
+        }
+        else
+        {
+            Dom.removeClass(elCell, 'fa-pen');
+            elCell.innerHTML = '<span style="padding-right:10px">---</span>';
+        }
+    };
+
+    YAHOO.widget.DataTable.fNameCell = function(elCell, oRecord, oColumn, oData) {
+        var fileName = oRecord.getData('fname');
+        var fileSize = oRecord.getData('fsize');
+        var fileType = oRecord.getData('ftype');
+        var toolTip = 'File: '+fileName+', Size: '+fileSize+' bytes, Type: '+fileType;
+        var elTd = Dom.getAncestorByTagName(elCell, 'td');
+        if (elTd) {
+            Dom.setAttribute(elTd, 'title', toolTip);
+        } else {
+            Dom.setAttribute(elCell, 'title', toolTip);
+        }
+        elCell.innerHTML = oData;
+        elCell.classList.add("no-trsl");
+        elCell.setAttribute("data-tl-ignore", "1");
+    };
+
+    YAHOO.widget.DataTable.preventTranslations = function(elLiner, oRecord, oColumn, oData) {
+        elLiner.classList.add("no-trsl");
+        elLiner.innerHTML = oData;
+        elLiner.setAttribute("data-tl-ignore", "1");
+    };
+
+    var mkDataTable = function(o) {
+        dtDocsList = function() {
+
+<?php
+if ($toPDF) {
+    ?>
+            var DSflds = [
+                'dbid',
+                'fdesc',
+                'fname',
+                'fcat',
+                'fsize',
+                'ftype',
+                'fdate',
+                'owner',
+                'fsrc'
+            ];
+            <?php // total widths = 603 ?>
+            var myColumnDefs = [
+                {
+                    key:"fdesc", label:"Description", sortable:false, width:120,
+                    formatter: YAHOO.widget.DataTable.preventTranslations
+                },
+                {
+                    key:"fname", label:"File Name", sortable:false, width:160,
+                    formatter: YAHOO.widget.DataTable.preventTranslations
+                },
+                {
+                    key:"fcat", label:"Category", sortable:false, width:100,
+                    formatter: YAHOO.widget.DataTable.preventTranslations
+                },
+                {key:"fsrc",  label:"Source", sortable:false, width:48},
+                {key:"fdate", label:"Date", sortable:false, width:60},
+                {
+                    key:"owner", label:"Owner", sortable:false, width:60,
+                    formatter: YAHOO.widget.DataTable.preventTranslations
+                }
+            ];
+            var myDataSource = new YAHOO.util.DataSource(YAHOO.cfData.attachData);
+            myDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+            myDataSource.responseSchema = {
+                fields: DSflds
+            };
+
+            var myConfigs = {
+                draggableColumns:false,
+                sortedBy:{key:"fdesc", dir:"yui-dt-asc" },
+                dynamicData: false
+            };
+            var myDataTable = new YAHOO.widget.DataTable("dtDocsDiv", myColumnDefs,
+                myDataSource, myConfigs
+            );
+
+            myDataTable.render(document.body);
+
+<?php
+} else {
+    ?>
+            var DSflds = [
+                'dbid',
+                'fdesc',
+                'fname',
+                'fcat',
+                'fsize',
+                'ftype',
+                'fdate',
+                'owner',
+                'fsrc',
+                'candel',
+                'canedit',
+                'del',
+                'edit'
+            ];
+            <?php // total widths = 603 ?>
+
+            var myColumnDefs = [
+                {
+                    key:"fdesc", label:"Description", sortable:true, width:120, //width change will not work since internal css added in casehome.sec
+                    formatter: YAHOO.widget.DataTable.preventTranslations
+                },
+                {key:"fname", label:"File Name", sortable:true, width:160, formatter: YAHOO.widget.DataTable.fNameCell},
+                {
+                    key:"fcat", label:"Category", sortable:true, width:100,
+                    formatter: YAHOO.widget.DataTable.preventTranslations
+                },
+                {key:"fsrc",  label:"Source", sortable:true, width:48},
+                {key:"fdate", label:"Date", sortable:true, width:60},
+                {
+                    key:"owner", label:"Owner", sortable:true, width:60,
+                    formatter: YAHOO.widget.DataTable.preventTranslations
+                },
+                {key:"edit", label:"&nbsp;", sortable:false, formatter: dtAllowEdit,width:23},
+                {key:"del", label:"&nbsp;", sortable:false, formatter: dtAllowDel, width:23}
+            ];
+            var myDataSource = new YAHOO.util.XHRDataSource("<?php
+                echo $sitepath; ?>case/caseFolderPages/dt-attachments-ws.sec");
+            myDataSource.responseType = YAHOO.util.XHRDataSource.TYPE_JSON;
+            myDataSource.responseSchema = {
+                resultsList: "Response.Records",
+                fields: DSflds,
+                metaFields: {
+                    totalRecords: "Response.Total",
+                    rowsPerPage: "Response.RowsPerPage",
+                    recordOffset: "Response.RecordOffset",
+                    page: "Response.Page"
+                }
+            };
+    <?php
+    if ($session->secure_value('accessLevel') == SUPER_ADMIN) {
+        ?>
+            myDataSource.subscribe('dataErrorEvent', function(o){
+                alert(YAHOO.lang.dump(o.response.responseText, 1));
+            });
+        <?php
+    } ?>
+
+            var myRequestBuilder = function(oState, oSelf)
+            {
+                <?php // Get states or use defaults ?>
+                oState = oState || {pagination:null, sortedBy:null};
+                var sort = (oState.sortedBy) ? oState.sortedBy.key : "fdesc";
+                var dir = (oState.sortedBy
+                    && oState.sortedBy.dir == YAHOO.widget.DataTable.CLASS_DESC
+                ) ? "yui-dt-desc" : "yui-dt-asc";
+                var startIndex = (oState.pagination) ? oState.pagination.recordOffset : 0;
+                var results = (oState.pagination)
+                    ? oState.pagination.rowsPerPage : <?php echo $recsPerPage?>;
+                <?php // Build custom request ?>
+
+                return  ("?si=" + startIndex + "&pp=" + results + "&ord="
+                    + sort + "&dir=" + dir);
+            };
+
+            var myConfigs = {
+                draggableColumns:true,
+                sortedBy:{key:"<?php echo $orderBy?>", dir:"<?php echo $sortDir?>" },
+                paginator: new YAHOO.widget.Paginator({
+                    alwaysVisible: false,
+                    totalRecords: <?php echo $ttlRecs?>,
+                    recordOffset: <?php echo $startIdx?>,
+                    rowsPerPage: <?php echo $recsPerPage?>,
+                    template: "{TotalRows} <span class=\"yui-pg-records\">Records</span> "
+                        + "<span class=\"yui-pg-extra\">Page</span> "
+                        + "{CurrentPageReport} {FirstPageLink} {PreviousPageLink} "
+                        + "{PageLinks} {NextPageLink} {LastPageLink} "
+                        + "{RowsPerPageDropdown} <span class=\"yui-pg-extra\">"
+                        + "Records per Page</span>",
+                    rowsPerPageOptions: [15,20,30,50,75,100],
+                    pageLinks: 6
+                }),
+                initialRequest: "<?php
+                    echo "?si=$startIdx&pp=$recsPerPage&ord=$orderBy&dir=$sortDir"; ?>",
+                generateRequest: myRequestBuilder,
+                dynamicData: true
+            };
+            var myDataTable = new YAHOO.widget.DataTable("dtDocsDiv", myColumnDefs,
+                myDataSource, myConfigs
+            );
+
+            myDataTable.handleDataReturnPayload = function(oRequest, oResponse, oPayload)
+            {
+                var ttl, pp, si, li;
+                si = oResponse.meta.recordOffset;
+                pp = oResponse.meta.rowsPerPage;
+                ttl = oResponse.meta.totalRecords;
+                if (ttl == 0) {
+                    li = 0;
+                } else if (si + pp <= ttl) {
+                    li = (si + pp) - 1;
+                } else {
+                    li = ttl - 1;
+                }
+
+                oPayload.totalRecords = ttl;
+                oPayload.pagination.totalRecords = ttl;
+                oPayload.pagination.rowsPerPage = pp;
+                oPayload.pagination.recordOffset = si;
+                oPayload.pagination.records = [si,li];
+                oPayload.pagination.page = oResponse.meta.page;
+                return oPayload;
+            };
+            myDataTable.render(document.body);
+
+            var dtDocsPick = function(oArg) {
+            var col = myDataTable.getColumn(oArg.target);
+            var rec = myDataTable.getRecord(oArg.target);
+
+            if (col.key == 'edit') {
+                <?php // Assumes that editing has the same permissions as candel ?>
+                <?php // Determines which editattach to use based on the type of document ?>
+                if (rec.getData('canedit') == 1) {
+                    if (rec.getData('fsrc') === 'DDQ') {
+                        <?php
+                        if ($accCls->allow('addCaseAttach')) {
+                            echo '                    YAHOO.', $editDDQAttach->jsPrefix,
+                            ".fetchData(rec.getData('dbid'));\n";
+                        } else {
+                            ?>
+                            showResultDiag('Action Prohibited',
+                                'You do not have permission to edit this document.'
+                            );
+                            <?php
+                        } ?>
+                    } else {
+                        <?php
+                        if ($accCls->allow('addCaseAttach')) {
+                            echo '                    YAHOO.', $editAttach->jsPrefix,
+                            ".fetchData(rec.getData('dbid'));\n";
+                        } else {
+                            ?>
+                            showResultDiag('Action Prohibited',
+                               'You do not have permission to edit this document.'
+                            );
+                            <?php
+                        } ?>
+                    }
+                }
+
+            } else if (col.key == 'del') {
+                var candel = parseInt(rec.getData('candel'));
+<?php
+    if ($accCls->allow('addCaseAttach')) {
+?>
+                if (candel == 1) {
+                    confirmAction('attach-del', rec.getData('dbid'), rec.getData('fsrc'));
+                } else {
+                    showResultDiag('Action Prohibited',
+                        'Document is part of this Case Folder. It can not be deleted.'
+                    );
+                }
+<?php
+            } else {
+?>
+                if (candel == 1) {
+                    showResultDiag('Action Prohibited',
+                        'You do not have permission to delete this document.'
+                    );
+                }
+<?php
+    }
+?>
+            } else {
+<?php
+    if ($accCls->allow('dlCaseAttach')) {
+?>
+                var dest = null;
+                switch (rec.getData('fsrc')) {
+                case '3P Monitor':
+                case 'Client':
+                    dest = "/cms/case/subinfoDownload.php";
+                    break;
+                case 'DDQ':
+                    dest = "/cms/ddq/ddq_download.php";
+                    break;
+                case 'Investigator':
+                    dest = "/cms/icase/iDownload.php";
+                    break;
+                }
+                if (dest) {
+                    dest += '?id=' + rec.getData('dbid');
+                    window.location = dest;
+                }
+<?php
+    }
+?>
+            }
+        };
+
+            <?php // Enable row highlighting  ?>
+            myDataTable.subscribe("rowMouseoverEvent", myDataTable.onEventHighlightRow);
+            myDataTable.subscribe("rowMouseoutEvent", myDataTable.onEventUnhighlightRow);
+<?php
+    if ($accCls->allow('dlCaseAttach') || $accCls->allow('addCaseAttach')) {
+?>
+            myDataTable.subscribe("cellClickEvent", dtDocsPick);
+<?php
+    }
+?>
+
+            <?php // Turn off obnoxious "Loading..." message ?>
+            var catchLoading = function(oArg) {
+                if (oArg.className == "yui-dt-loading")
+                    this.hideTableMessage();
+            };
+            myDataTable.on("tableMsgShowEvent", catchLoading);
+
+<?php
+}
+
+if (0) {
+?>
+
+            var dsError = function(oArgs) {
+                alert('responseText: ' + oArgs.response.responseText);
+            };
+            myDataSource.subscribe('dataErrorEvent', dsError);
+
+<?php
+}
+?>
+
+            return {
+                oDS: myDataSource,
+                oDT: myDataTable
+            };
+        }();
+
+<?php
+if ($addDocBtn) {
+?>
+        <?php // Add Document button ?>
+        var addDocBtn = new YAHOO.widget.Button("add-doc-btn", {
+            id: "add-doc-btn-yui",
+            label: "Add New",
+            type: "button"
+        });
+        addDocBtn.on('click', function(o){
+            casedocUpl.setUploadForm('show');
+        });
+
+<?php
+}
+?>
+
+    };
+    Event.onDOMReady(mkDataTable);
+})();
+
+<?php
+if (!$toPDF) {
+?>
+
+    function dtDocsRefresh()
+    {
+        if (typeof dtDocsList == 'undefined' || dtDocsList == null)
+            return;
+        var DT = dtDocsList.oDT;
+        var oState = DT.getState();
+        var request = DT.get("generateRequest")(oState, DT);
+        var oCallback = {
+            success: function(oRequest, oResponse, oPayload) {
+                var newPayload = DT.handleDataReturnPayload(oRequest, oResponse, oPayload);
+                DT.onDataReturnSetRows(oRequest, oResponse, newPayload);
+            },
+            failure: function() {
+<?php
+    if ($_SESSION['userType'] == SUPER_ADMIN) {
+?>
+                alert("Failed loading data.");
+<?php
+    } else {
+?>
+                var a=1; <?php // do nothing ?>
+<?php
+    }
+?>
+            },
+            argument: oState,
+            scope: DT };
+        dtDocsList.oDS.sendRequest(request, oCallback);
+    }
+
+<?php
+}
+?>
+
+</script>

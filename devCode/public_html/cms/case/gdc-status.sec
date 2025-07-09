@@ -1,0 +1,394 @@
+<?php
+/**
+ * GDC Review Summary - SP interface
+ */
+
+require_once __DIR__ . '/../includes/php/'.'cms_defs.php';
+$session->cms_logged_in(true, -1);
+require_once __DIR__ . '/../includes/php/'.'class_access.php';
+$accCls = UserAccess::getInstance();
+
+if (!$session->value('IN_CASE_HOME')
+    || $session->secure_value('userClass') != 'vendor'
+    || !isset($_SESSION['currentCaseID'])
+    || !($caseID = $_SESSION['currentCaseID'])
+    || !$accCls->allow('accCaseMng')
+) {
+    return;
+}
+
+$sessKey = 'activeGdcOp';
+
+echo '<div id="pgdiv0">';
+
+require_once __DIR__ . '/../includes/php/'.'funcs_misc.php';
+require_once __DIR__ . '/../includes/php/'.'class_gdc.php';
+require_once __DIR__ . '/../includes/php/Models/Globals/Features/TenantFeatures.php';
+
+
+$e_clientID = $clientID = $_SESSION['clientID'];
+$e_spID = $spID = $_SESSION['vendorID'];
+$e_caseID = intval($caseID);
+$spdb = GLOBAL_SP_DB;
+
+// Is Media Monitor enabled for the given case's tenant?
+$mmEnabled = (($tf = (new TenantFeatures($clientID))->tenantHasFeatures([Feature::TENANT_MEDIA_MONITOR], FEATURE::APP_TPM)) && !empty($tf[Feature::TENANT_MEDIA_MONITOR]));
+
+$gdc = new Gdc($clientID);
+
+$userCaseNum = $dbCls->fetchValue("SELECT userCaseNum FROM cases WHERE id = '$e_caseID' "
+    . "AND clientID = '$e_clientID' LIMIT 1"
+);
+$currentScreeningID = $dbCls->fetchValue("SELECT id FROM $spdb.spGdcScreening "
+    . "WHERE caseID = '$e_caseID' AND clientID = '$e_clientID' AND spID = '$e_spID' "
+    . "ORDER BY id DESC LIMIT 1"
+);
+$isCurrent = $mmReview = 0;
+$created = '';
+$since = 'n/a';
+$screeningRec = false;
+if ($currentScreeningID) {
+    if (isset($_GET['scrID'])) {
+        $screeningID = intval($_GET['scrID']);
+    } else {
+        $screeningID = $currentScreeningID;
+    }
+    $isCurrent = ($screeningID == $currentScreeningID) ? 1 : 0;
+    $e_screeningID = $screeningID; // Originated from DB or explicitely int typed
+    $screeningRec = $dbCls->fetchObjectRow("SELECT needsReview, created, seq "
+        . "FROM $spdb.spGdcScreening WHERE id = '$e_screeningID' AND caseID = '$e_caseID' "
+        . "AND clientID = '$e_clientID' AND spID = '$e_spID' LIMIT 1"
+    );
+    $created = substr((string) $screeningRec->created, 0, 10);
+    $e_created = $created; // $created value originated from DB
+    $userGdcNum = 'GDC-' . $userCaseNum . '-' . $screeningRec->seq;
+    $days = $dbCls->fetchValue("SELECT DATEDIFF(CURRENT_DATE, '$e_created')");
+    $screeningRec->needsReviewMM = false;
+    if ($mmEnabled) {
+        include_once __DIR__ . '/../includes/php/Models/TPM/MediaMonitor/MediaMonitorData.php';
+        $mmModel = new MediaMonitorData($clientID, $e_spID);
+        $tpIdSql = "SELECT tpID FROM cases\n"
+            . "WHERE id = {$e_caseID} AND clientID = {$e_clientID} AND caseAssignedAgent = {$e_spID} LIMIT 1";
+        $tpID = $dbCls->fetchValue($tpIdSql);
+        $mmReview = $mmModel->syncHitsByDetermination($tpID, $screeningID, 'undetermined', true);
+
+        if (!empty($mmReview) && array_key_exists('undetermined', $mmReview) && $mmReview['undetermined'] > 0) {
+            $screeningRec->needsReviewMM = "1";
+        }
+    } 
+    $since = elapsedDays($days);
+
+    if ($days > 1) {
+        $since .= ' ago';
+    }
+    if (!isset($_SESSION[$sessKey])) {
+        $_SESSION[$sessKey] = ['screeningID' => $screeningID, 'isCurrent' => $isCurrent, 'resultID' => 0, 'showFP' => 0, 'showUC' => 1];
+    } else {
+        $_SESSION[$sessKey]['screeningID'] = $screeningID;
+        $_SESSION[$sessKey]['isCurrent'] = $isCurrent;
+        $_SESSION[$sessKey]['resultID'] = 0;
+    }
+} else {
+    echo '(No records)';
+    exit;
+}
+
+
+$when = <<< EOT
+
+<div class="marg-bot1e fw-bold" style="padding-top: 5px">$userGdcNum:
+<em class="plain">$created ($since)</em></div>
+
+EOT;
+
+if (!$screeningRec) {
+    $review = '(n/a)';
+} elseif ($screeningRec->needsReview
+    || property_exists($screeningRec, 'needsReviewIcij') && $screeningRec->needsReviewIcij
+    || property_exists($screeningRec, 'needsReviewMM') && $screeningRec->needsReviewMM
+) {
+    if ($isCurrent) {
+        $review = 'Yes';
+    } else {
+        $review = '(superseded by more recent report)';
+    }
+} else {
+    $review = 'No';
+}
+
+$mustCheck = <<< EOT
+
+<div class="fw-bold">Review Needed?
+    <em class="plain" id="gdc-review-status">$review</em></div>
+
+EOT;
+
+$subjects = $subjects_nr = '';
+
+
+$hasHits = [];
+$noHits   = [];
+
+$rows = $dbCls->fetchObjectRows(
+    "SELECT * FROM {$spdb}.spGdcResult WHERE screeningID = '$screeningID' AND clientID = '$e_clientID'"
+);
+
+// Assures subjects with hits account for Media Monitor on initial load
+if ($mmEnabled) {
+    $tpIdSql = "SELECT tpID FROM cases\n"
+       . "WHERE id = {$e_caseID} AND clientID = {$e_clientID} AND caseAssignedAgent = {$e_spID} LIMIT 1";
+    $tpID = $dbCls->fetchValue($tpIdSql);
+
+    // Determine if any hits are awaiting review for the hit, or if any hits have already been adjudicated
+    if (is_array($rows) && count($rows) > 0) {
+        foreach ($rows as &$row) {
+            $gdcRsltID   = (int)$row->id;
+            $gdcRsltNmID = (int)$row->nameID;
+            $idType      = ($row->recType == 'Person') ? 'person' : 'profile';
+            $mmHits      = $mmModel->getMediaMonitorReviewForSubject($tpID, $gdcRsltNmID, $idType);
+            $mmMatch     = $mmModel->getMediaMonitorMatchForSubject($tpID, $screeningID, $gdcRsltID, $idType);
+            $mmFalsePos  = $mmModel->getMediaMonitorFalsePositiveForSubject($tpID, $screeningID, $gdcRsltID, $idType);
+            if ($mmHits > 0 || $mmMatch > 0 || $mmFalsePos > 0) {
+                $row->matches = 1;
+                $row->hits = $mmHits;
+            }
+        }
+    }
+}
+
+if ($rows) {
+
+    $tmImg = '<span class="fas fa-bullseye" style="font-size: 16px; margin-top: 5px;"></span>';
+    $fpImg = '<span class="fas fa-times-circle" style="font-size: 16px; margin-top: 5px;"></span>';
+    foreach ($rows as &$row) {
+        if ($row->matches) {
+            $hasHits[] = $row;
+        } else {
+            $noHits[] = $row;
+        }
+    }
+
+    if ($hasHits) {
+        $subjects = '<div class="marg-top2e marg-bot1e"><b><u>Subjects with hits:</u></b> '
+            . '<em class="note">Click on name to view results</em></div>';
+        $subjects .= <<< EOT
+<div class="indent">
+<table id="subject-list" class="gray-sp" cellpadding="3" cellspacing="2">
+<tr>
+    <th width="12%">Type</th>
+    <th>Name</th>
+    <th width="15%" class="cent no-wrap">Review</th>
+    <th width="10%" class="cent">$tmImg</th>
+    <th width="10%" class="cent">$fpImg</th>
+</tr>
+
+EOT;
+
+        $rowcnt = 0;
+        foreach ($hasHits as $row) {
+            $altClr = ($rowcnt++ & 1) ? 'odd' : 'even';
+            $trID = $rowClick = '';
+
+            if ($row->matches) {
+                $altClr .= ' clk';
+                $rowClick = ' title="Click to view details" '
+                    . 'onclick="gdcdata.opRequest(\'load-result\', '
+                    . $row->id . ', ' . $screeningID . ')"';
+                $trID = ' id="trRes' . $row->id . '"';
+            }
+            $details = unserialize($row->details);
+            $first = trim((string) $details['firstName']);
+            $last = trim((string) $details['lastName']);
+            $full = trim((string) $details['fullName']);
+            $name = false;
+            switch ($row->nameBasis) {
+            case 'fila':
+                if ($first || $last) {
+                    $name = trim($first . ' ' . $last);
+                }
+                break;
+            case 'alts':
+            case 'full':
+                if ($full) {
+                    $name = $full;
+                }
+                break;
+            default:
+                // probably screened before nameBasis was added
+                if ($first || $last) {
+                    $name = trim($first . ' ' . $last);
+                } elseif ($full) {
+                    $name = $full;
+                }
+            }
+            if (!$name) {
+                $name = '(name missing)';
+                $e_row_name_id = (int)$row->nameID;
+                $nameTbl = REAL_GLOBAL_DB . '.g_gdcSearchName';
+                $nmSql = "SELECT name FROM $nameTbl WHERE id = '$e_row_name_id' LIMIT 1";
+                if ($row->nameID && ($tmp = $dbCls->fetchValue($nmSql))) {
+                    $name = $tmp;
+                }
+            }
+            // name error?
+            if ($row->nameError) {
+                $name = '<span class="fas fa-exclamation-triangle" style="font-size: 16px;" '
+                    . 'alt="'.$details['error'].'" title="'.$details['error'].'"></span> ' . $name;
+            }
+
+            $subjects .= <<< EOT
+<tr{$trID} class="$altClr"{$rowClick}>
+    <td>$row->recType</td>
+    <td class="no-trsl">$name</td>
+    <td><div id="sl-rvw{$row->id}" class="ta-cent">&nbsp;</div></td>
+    <td><div id="sl-tm{$row->id}" class="ta-cent">&nbsp;</div></td>
+    <td><div id="sl-fp{$row->id}" class="ta-cent">&nbsp;</div></td>
+</tr>
+
+EOT;
+
+        }
+        $subjects .= '</table></div>';
+    }
+
+    if ($noHits) {
+        $subjects_nr = '<div class="marg-top2e marg-bot1e"><b><u>Subjects with '
+            . '<i>no</i> hits</u></b></div>';
+        $subjects_nr .= <<< EOT
+<div class="indent">
+<table id="subject-list-nr" class="gray-sp" cellpadding="3" cellspacing="2">
+<tr>
+    <th width="12%">Type</th>
+    <th>Name</th>
+</tr>
+
+EOT;
+
+        $rowcnt = 0;
+        foreach ($noHits as $row) {
+            $altClr = ($rowcnt++ & 1) ? 'odd' : 'even';
+            $details = unserialize($row->details);
+            $first = trim((string) $details['firstName']);
+            $last = trim((string) $details['lastName']);
+            $full = trim((string) $details['fullName']);
+            if ($first || $last) {
+                $name = trim($first . ' ' . $last);
+            } elseif ($full) {
+                $name = $full;
+            } else {
+                $name = '(name missing)';
+            }
+            // name error?
+            if ($row->nameError) {
+                $name = '<span class="fas fa-exclamation-triangle" style="font-size: 16px;" '
+                    . 'alt="'.$details['error'].'" title="'.$details['error'].'"></span> ' . $name;
+            }
+            $subjects_nr .= <<< EOT
+<tr class="$altClr">
+    <td>$row->recType</td>
+    <td class="no-trsl" data-tl-ignore="1">$name</td>
+</tr>
+
+EOT;
+
+        }
+        $subjects_nr .= '</table></div>';
+    }
+
+} else {
+    $subjects .= '<div class="indent">None found.</div>';
+}
+
+
+$symbols2 = <<< EOT
+
+<table cellpadding="0" cellspacing="5">
+<tr>
+    <td width="16%" rowspan="6" valign="top"><b><u>KEY</u></b></td>
+    <td width="44%" colspan="2"><b>Status:</b></td>
+    <td width="40%" colspan="2"><b>Determination:</b></td>
+</tr>
+<tr>
+    <td width="18"><span class="fas fa-search" style="font-size: 16px;"></span></td>
+    <td>New</td>
+
+    <td width="25"><span class="fas fa-bullseye" style="font-size: 16px;"></span></td>
+    <td>True Match</td>
+</tr>
+<tr>
+    <td><span class="fas fa-asterisk" style="font-size: 16px;"></span></td>
+    <td>Changed</td>
+
+    <td><span class="fas fa-times-circle" style="font-size: 16px;"></span></td>
+    <td>False Positive</td>
+</tr>
+<tr>
+    <td><span class="fas fa-equals" style="font-size: 16px;"></span></td>
+    <td>Unchanged</td>
+
+    <td><span class="fas fa-question" style="font-size: 16px;"></span></td>
+    <td>Undetermined</td>
+</tr>
+<tr>
+    <td><span class="fas fa-exclamation-triangle" style="font-size: 16px;"></span></td>
+    <td>Name Error</td>
+
+    <td colspan="2"></td>
+</tr>
+</table>
+
+EOT;
+
+// Now show the summary
+echo <<< EOT
+
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td width="49%" valign="top">$when
+    $mustCheck
+    $subjects
+    $subjects_nr
+    <div id="basis-summary" class="marg-top1e"><span class="fw-bold">Basis:</span>
+    <ul>
+        <li>PEP: Nearly Half a Million Politically Exposed Persons</li>
+        <li>Sanction Lists: Frequently Updated Postings from All Major Sanction Lists</li>
+        <li>Watch Lists: Embargo and Caution Lists (FBI, World Bank, Interpol, etc.)</li>
+        <li>Enforcement Lists: Monitoring of Hundreds of Financial Enforcement Agencies</li>
+        <li>Courts: Monitoring of Cross-border Investigations</li>
+EOT;
+    if ($mmEnabled) {
+        echo "<li>Media Monitor: Scan and surface relevant adverse media across the web</li>";
+    }
+echo <<< EOT
+    </ul>
+    </div>
+
+    </div></td>
+
+    <td valign="top">
+        <div id="review-symbols" class="disp-none">$symbols2</div>
+        <div id="hit-list" class="marg-bot1e"></div>
+        </td>
+</tr>
+</table>
+
+EOT;
+
+
+?>
+
+</div>
+<script type="text/javascript">
+YAHOO.util.Event.onDOMReady(function(o){
+    var Dom = YAHOO.util.Dom;
+    Dom.setStyle('pgdiv0', 'overflow', 'auto');
+    Dom.setStyle('pgdiv0', 'width', gdcdata.pgdivWidth + 'px');
+    Dom.setStyle('pgdiv0', 'height', gdcdata.pgdivHeight + 'px' );
+    Dom.setStyle('pgdiv0', 'display', 'block');
+<?php if ($hasHits) {
+    ?>
+    gdcdata.opRequest('update-summary');
+    <?php
+} ?>
+});
+</script>
