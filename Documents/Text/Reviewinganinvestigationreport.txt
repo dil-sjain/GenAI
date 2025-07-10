@@ -1,0 +1,18 @@
+Reviewing an investigation report
+When you receive an email that an investigation is complete, review the investigation report.
+
+Use one of these methods to go to the investigation:
+
+Select the link in the email notifying you that the investigation is complete.
+
+Locate the third-party from your dashboard, Investigations Needing Review.
+
+Use the Quick Search on the left menu.
+On the CaseClosed Management tab, Case Folder, select on the Attachments tab and review the findings.
+Once reviewed, and a decision has been made, select the Accept button to close the case.
+
+Choose Approved or Denied, enter a note, and select Submit.
+
+If you want to approve or deny the profile, select  View then select the  StatusClosed button. Select the approval statusClosed and enter an explanation.
+
+If approved, the third-party can be tracked and monitored for renewal. See Third-party profiles (3P Profiles).

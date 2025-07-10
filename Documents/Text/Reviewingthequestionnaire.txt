@@ -1,0 +1,35 @@
+Reviewing the questionnaire
+Follow these steps to review the due diligence questionnaire (DDQClosed).
+
+Important
+
+Street address and city are not required on the profile record, but they are required for a caseClosed investigation. An error occurs if the information is missing when a case is triggered.
+
+Locate the questionnaire using one of these methods:
+
+Locate the third-party from your dashboard, Questionnaires Needing Review. Select the case.
+
+Use the Quick Search on the left menu and search by Case Folders, Company Name. From the Case List tab, select the case in a StageClosed of Qualification.
+
+On the Case Management tab, Case Folder tab.
+
+On the far right, select the Reviewer tab and scroll down to review each item marked in red as Needs Review. These items may include unexpected questionnaire responses or renewal responses that have changed from previous responses.
+
+When you have reviewed each item, including receiving all documents and receipts, change Needs Review to green Reviewed. select the note icon to add notes about the mitigation. Continue to work on each item.
+If one or more items are not resolved, select one of the following buttons at the case level.
+
+Select  Convert to order further investigation, choose the type of investigation, and see the cost before you complete the order. See Converting a questionnaire into an investigation.
+
+Select  Reject | Close to do one of the following:
+
+Send questionnaire back to the third-party for clarification by selecting Incomplete Information provided in DDQ. The case statusClosed is Case Rejected.
+
+Make another selection to mark the case review complete and close the case. The case status is Closed.
+
+Select Reassign to assign the case to another team member. If the current case requester reassigns the case to a new requester, the new requester receives an email informing them of the change. If a new requester takes a case from the previous requester, the previous requester will receive an email notifying them of the change. If another team member (who is not the previous requester nor the new requester) reassigns the case, both the previous and new requesters will receive an email notifying them of the change.
+
+Continue until the 3P Monitor hits have been adjudicated/remediated, DDQ unexpected responses have been reviewed, and, if applicable, compliance factors are completed.
+
+Review the entirety of the case folder for completeness, or to see if anything requires further explanation.
+
+On the Record Detail tab, select Status and select a status allowed by your organization such as Pending, Approved, or Denied.

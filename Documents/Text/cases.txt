@@ -1,0 +1,96 @@
+Cases
+3P ProfilesClosed and 3P Engagements (if enabled) are assigned cases for each questionnaire and each investigation.
+
+To send questionnaires, review, and resolve responses, see:
+
+Sending a questionnaire
+
+Reviewing the questionnaire
+
+Converting a questionnaire into an investigation
+
+To order a due diligence investigation, see Ordering an investigation.
+
+To review a caseClosed investigation report, see Reviewing an investigation report.
+
+When you select Case Management from the menu on the left of the dashboard, the following tabs display:
+
+Case List tab
+
+Case Folder tab
+
+Case List tab
+The Case List tab shows a list of cases which can be filtered by the criteria shown. Select to change the search fieldClosed from, for example, Case Number, Company Name, Requester, and so on. Complete other filters, as needed. Select Reset View to clear filters or searches. You can select a column to change the display order.
+
+Case stages
+A case goes through the following stages, which display on the Case List tab:
+
+DDQClosed Invite: The third-party is invited to complete the DDQ online, but the third-party has not yet submitted the DDQ.
+Qualification: The third-party completed and submitted the DDQ.
+Case Rejected: The case was rejected due to incomplete information. The DDQ is in the third-party's queue, and the third-party must update and resubmit the DDQ.
+Case Closed: The case was closed without ordering an investigation.
+Budget Requested: An ADD investigation was ordered or an OSIClosed or EDDClosed investigation was ordered without specifying a country, so Third Party Risk Management/Compliance requested that the investigator propose a budget.
+Budget Submitted: The investigator submitted a proposed budget.
+Budget Rejected: The proposed budget was rejected.
+Draft: The case was created manually but not submitted.
+Budget Approved: The case is submitted and the investigator's budget is approved. The case is in the investigator's queue and awaiting investigator acceptance.
+Accepted by Investigator: The investigator accepted the case. An auto-generated email is sent to the requester with the following information:
+Notification that the investigation is in progress. The email subject is: Subject: Investigation Accepted.
+Notification of the report's Expected Due Date based on an agreed upon schedule.
+Rejected by Investigator: The investigator rejected the case.
+Completed by Investigator: The investigator completed the investigation, uploaded the report to the case, and marked it as Complete. An auto-generated email notifies the requester that the report is available for download.
+Case Folder tab
+Case folder tabs are based on questionnaire responses and are customizable. For example, the Company, Personnel, Business Practices, Relationship, and Additional Information tabs are customizable and may be optional, based on the case. Manually created cases are not associated with a questionnaire and will have fewer tabs.
+
+If a case has been created from an engagement, you can select the View icon to view the 3P EngagementClosed. Cases created from an engagement inherit data by default, including TypeClosed, Category, Region, and Department.
+
+To view a case folder, select a row on the Case List to display the Case Folder tab. These are the default tabs but you may see more or less tab, as indicated earlier.
+
+Company tab: View the case summary, including details on the company, scope of due diligence, and compliance findings. The Intake FormClosed Source, Intake Form Language, and Intake Form Version display. In addition, the translations are displayed, such as Dropdown Translations (Active/Inactive) and Radio Button Translations (Active/Inactive).
+
+Personnel tab: View key managers, owners, and other personnel associated with the third-party. You can add personnel.
+
+Business Practices tab: View past and current business conduct.
+
+Relationship tab: View relationships with other parties such as governments and compliance organizations. View individual and bank references.
+
+Additional Information tab: View information such as if the organization has ethics policies, provides training, and so on.
+
+Attachments: View documents provided for the case. You can upload new documents.
+
+Executive Summary tab: Quickly view a summary of additional details.
+
+Case Notes tab: View and add case notes. Case notes do not roll up to, for example, the 3P Profile.
+
+Reviewer tab: Review a list of deviations from the recommended scope of due diligence including red flags, unexpected questionnaire responses, and renewal responses that have changed from previous responses. Items are identified as Needs Review. For step-by-step details, see Reviewing the questionnaire.
+
+Audit Log tab: View the details of each action taken on the case including the date, event, user, case identifier, and details. If you have the correct rights, you can view all actions taken in the system. See Managing audit logs.
+
+Case action buttons
+These action buttons are available as you work with cases:
+
+ Accept to accept the investigation and move the case to the next stageClosed. The case moves from Completed by Investigator to Accepted by Requester. This closes the case.
+
+ Convert to order further investigation, choose the investigation type, and see the cost before you complete the order.
+
+Invite | Re-Invite or Renew to send a case questionnaire to the third-party for the first time or again.
+
+ Print to print the information to your downloads folder in PDF format.
+
+ Reassign to assign the case to another team member. If the current case requester reassigns the case to a new requester, the new requester receives an email informing them of the change. If a new requester takes a case from the previous requester, the previous requester will receive an email notifying them of the change. If another team member (who is not the previous requester nor the new requester) reassigns the case, both the previous and new requesters will receive an email notifying them of the change.
+
+ Reject/Close and select a response. Examples:
+
+01 - Incomplete information: Select this reject code to send an incomplete questionnaire back to the third-party. The third-party will receive an email with the Explanation you enter. Upon receiving the email notification, the third-party can update their responses and resubmit. Only code 01 sends an alert.
+
+02 - Red Flags Revealed in Reference Checks: The case is closed. No notification is sent to the third-party.
+
+04 - Relationship not desired for business reasons: The case is closed. No notification is sent to the third-party.
+
+05 - Background Check not Required per our Due Diligence Policy: The case is closed. No notification is sent to the third-party.
+
+06 - Budget Disagreement: The case is closed. No notification is sent to the third-party.
+
+99 - Permanently Delete Case: The case is deleted manually as viewed in the audit record. No notification is sent to the third-party.
+
+Once rejected or closed The case CASE REJECT/CLOSE DETAIL display on Case Management, Company tab.

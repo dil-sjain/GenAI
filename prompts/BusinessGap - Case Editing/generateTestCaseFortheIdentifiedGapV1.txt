@@ -1,0 +1,96 @@
+@workspace
+ 
+# PERSONA
+Act as a Senior QA Engineer with deep expertise in our 'cases' module. You are meticulous, detail-oriented, and your goal is to create test cases that are unambiguous and can be executed by a junior tester without any questions.
+ 
+# CONTEXT
+To perform your task, you must analyze the following artifacts and prioritise source code over documentation:
+- The identified gap: [Case Editing/Updating - No tests for editing a case after it has moved past certain workflow stages (e.g., after ASSIGNED).
+No tests for editing a case and changing the case type to one that requires or does not require subInfo, and the resulting navigation/validation.]
+- The source code in: php files in all sub directories of `devCode/app/Controllers/TPM/CaseMgt` and `devCode/public_html/cms/case` 
+- The documentation in: `cases.txt,Convertingaquestionnaireintoaninvestigation.txt,Managingauditlogs.txt,Orderinganinvestigation.txt,Reviewinganinvestigationreport.txt,Reviewingthequestionnaire.txt,sendingaquestionnaire.txt`
+- The existing manual tests in: `casemgmt.csv`
+ 
+# RULES & QUALITY BAR
+- Every test case MUST have these fields: Key,Name,Status,Precondition,Objective,Priority,Test Script (Step-by-Step) - Step,Test Script (Step-by-Step) - Test Data,Test Script (Step-by-Step) - Expected Result,Test Script (Plain Text).
+- 'Preconditions' must detail the state of the system and data before the test begins.
+- 'Test Steps' must be a numbered list of clear, small, executable user actions.
+- 'Expected Results' must be a numbered list describing the exact system response. This includes UI changes, API responses, and database state changes. Vague results like "it should work" are forbidden.
+ 
+# GOLD-STANDARD EXAMPLE
+TPM-T3661,TPM_CM_To Verify whether the User able to get error messge after clicking Continue|Enter button without choosing Yes/No radio button and able to click on Go Back|Edit button,Draft,,"To Verify whether the User able to click Go Back|Edit button in DUE 
+DILIGENCE KEY INFO FORM - COMPANY pop up page in Edit action item under 
+Case Folder tab
+To Verify whether the User able to get error messge after clicking 
+Continue|Enter button without choosing Yes/No radio button value in DUE 
+DILIGENCE KEY INFO FORM - COMPANY pop up page in Edit action item under 
+Case Folder tab",/TPM_Automation (CoE)/CaseManagement,Normal,,P2,712020:53b5d4f3-46a6-4a96-948c-d95baefc4e3f,,TPM-15955,,"   1. Click on Case Management Tab
+   2. Click and select Draft value in Stage dropdown field and Click on
+      case number under Case List sub tab
+   3. Click on Edit action item
+   4. Click the ""Name this case"" text field
+   5. Choose the type from ""type of case"" dropdown
+   6. Click the Brief Note/Billing Information adjustable text box
+   7. Click ""Region"" dropdown
+   8. Click ""Country"" dropdown
+   9. Click ""State/Province"" dropdown
+  10. Click ""Department"" dropdown
+  11. Click ""Billing Unit"" dropdown
+  12. Click the ""Continue|Enter Details"" button
+  13. Click Go Back|Edit button
+  14. Click the ""Continue|Enter Details"" button
+  15. Enter value in Comapany Name Field
+  16. Enter value in Address1 Field
+  17. Enter value in City field
+  18. Select value in Country drop down field
+  19. Click on Continue|Enter Details button
+  20. Click on close button",,"   1. Should log in to TPM application and Access Case Management tab
+   2. User should be able Click and select Draft value in Stage dropdown
+      field and case number under Case List sub tab and it opens case
+      details under Case Folder subtab with Edit action item
+   3. User should be able click Edit action item and UPDATE CASE FOLDER pop
+      up page opens Continue|Enter Details and Cancel button and Name This
+      Case,Type Of Case,Brief Note/Billing Information, region, Country and
+      Billing Unit are the required fields
+   4. Should be able to add/enter the text
+   5. Should be able to select the type from ""Type of case"" dropdown
+   6. Should be add the enter the data in the note text box
+   7. Should be able to select the region from the region dropdown
+   8. Should be able to select the country from the country dropdown
+   9. Should be able to select the State/Province from the State/Province
+      dropdown
+  10. Should be able to select the Department from the Department dropdown
+  11. Should be able to select the Billing Unit from the Billing Unit
+  12. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY""
+      window which has Type with Prospective and Current radio buttons,
+      Relationship type dropdown, Legal Form of Company dropdown, Company
+      identity with: Company Name:, Alternate Trade Name(s), Address 1:,
+      Address 2:, City:, text boxes and Country, State/Province:, dropdowns
+      and Postcode: text box, ""Principals"" with Add/Edit option with ""Go
+      Back|Edit"", Continue|Enter Details, Save and Close and Cancel option
+      buttons
+  13. User should able to click Go Back|Edit,DUE DILIGENCE KEY INFO FORM -
+      COMPANY pop up page disappeares and lands back on UPDATE CASE FOLDER
+      pop up page and can edit fields.
+  14. Should be able to Navigate to ""DUE DILIGENCE KEY INFO FORM - COMPANY""
+      window which has Type with Prospective and Current radio buttons,
+      Relationship type dropdown, Legal Form of Company dropdown, Company
+      identity with: Company Name:, Alternate Trade Name(s), Address 1:,
+      Address 2:, City:, text boxes and Country, State/Province:, dropdowns
+      and Postcode: text box, ""Principals"" with Add/Edit option with ""Go
+      Back|Edit"", Continue|Enter Details, Save and Close and Cancel option
+      buttons
+  15. Should be able to enter value.
+  16. Should be able to enter value.
+  17. Should be able to enter value
+  18. Should be able to select value in dropdown
+  19. User should be able to click on Continue|Enter button and Error pop
+      up page opens with message The following errors have occurred.Please
+      correct the following errors listed below.
+      1. You must tell us if you want the Field Investigation performed on
+      the Principals.
+      along with Close button
+  20. Should be able to click and error pop will gets disappear",,
+ 
+# TASK
+Now, for the identified gap (Case Editing/Updating), generate all new, complete manual test cases that adhere to all the rules and matches the quality of the example provided.
