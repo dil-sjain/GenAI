@@ -1,0 +1,159 @@
+Key: TPM-T4201
+Name: TPM_CM_Verify sticky form data is retained when navigating away and returning during case creation
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a Superadmin with valid credentials.
+User has access to the Case Management tab and permission to add cases.
+No session timeout has occurred.
+Objective:
+To verify that partially entered form data in the Add Case workflow is retained if the user navigates away and returns before submitting.
+
+Priority: P1
+
+Test Script (Step-by-Step) - Step:
+
+Click on the Case Management Tab.
+Click the "Add Case" button.
+Enter values in the following fields: Case Name, Case Type, Region, Country, Department, Billing Unit.
+Without submitting, navigate to a different tab (e.g., Dashboard).
+Return to the Case Management tab and click the "Add Case" button again.
+Observe the form fields.
+Test Script (Step-by-Step) - Test Data:
+
+Case Name: "Sticky Test"
+Case Type: [any valid type]
+Region: [any valid region]
+Country: [any valid country]
+Department: [any valid department]
+Billing Unit: [any valid billing unit]
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The Add Case form opens.
+Entered values are accepted in all fields.
+Navigating away does not clear the form data.
+Returning to the Add Case form, all previously entered values are still present.
+The user can continue case creation without re-entering data.
+Test Script (Plain Text):
+Begin creating a case, enter data, navigate away, and return. The form must retain all previously entered values.
+
+Key: TPM-T4202
+Name: TPM_CM_Verify session variables are reset when starting a new case creation
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a Superadmin with valid credentials.
+User has access to the Case Management tab and permission to add cases.
+At least one case has been partially created but not submitted.
+Objective:
+To verify that starting a new case creation resets all session variables and clears any sticky form data from previous attempts.
+
+Priority: P1
+
+Test Script (Step-by-Step) - Step:
+
+Click on the Case Management Tab.
+Click the "Add Case" button.
+Enter values in all required fields.
+Without submitting, close the Add Case form.
+Click the "Add Case" button again.
+Observe the form fields.
+Test Script (Step-by-Step) - Test Data:
+
+Case Name: "Reset Test"
+Case Type: [any valid type]
+Region: [any valid region]
+Country: [any valid country]
+Department: [any valid department]
+Billing Unit: [any valid billing unit]
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The Add Case form opens.
+Entered values are accepted in all fields.
+Closing the form does not submit the data.
+Reopening the Add Case form, all fields are reset to their default (empty) state.
+No previous data is present in any field.
+Test Script (Plain Text):
+Start a new case, enter data, close the form, and start again. The form must be cleared of all previous data.
+
+Key: TPM-T4203
+Name: TPM_CM_Verify session timeout during multi-step case creation results in loss of unsaved data
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a Superadmin with valid credentials.
+User has access to the Case Management tab and permission to add cases.
+Session timeout is configured to a known value (e.g., 15 minutes).
+Objective:
+To verify that if a session timeout occurs during multi-step case creation, unsaved data is lost and the user is prompted to log in again.
+
+Priority: P1
+
+Test Script (Step-by-Step) - Step:
+
+Click on the Case Management Tab.
+Click the "Add Case" button.
+Enter values in all required fields.
+Wait for the session to expire (do not interact with the application).
+Attempt to submit the form or navigate to the next step.
+Observe the system response.
+Test Script (Step-by-Step) - Test Data:
+
+Case Name: "Timeout Test"
+Case Type: [any valid type]
+Region: [any valid region]
+Country: [any valid country]
+Department: [any valid department]
+Billing Unit: [any valid billing unit]
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The Add Case form opens.
+Entered values are accepted in all fields.
+After session timeout, any action prompts the user to log in again.
+Upon re-login, the Add Case form is empty and no previous data is retained.
+No partial case is created in the database.
+Test Script (Plain Text):
+Begin creating a case, let the session expire, and try to continue. The system must require login and discard all unsaved data.
+
+Key: TPM-T4204
+Name: TPM_CM_Verify session variables and sticky data are cleared when user logs out mid-case creation
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a Superadmin with valid credentials.
+User has access to the Case Management tab and permission to add cases.
+Objective:
+To verify that logging out during case creation clears all session variables and sticky form data.
+
+Priority: P2
+
+Test Script (Step-by-Step) - Step:
+
+Click on the Case Management Tab.
+Click the "Add Case" button.
+Enter values in all required fields.
+Without submitting, log out of the application.
+Log back in as the same user.
+Click the "Add Case" button.
+Observe the form fields.
+Test Script (Step-by-Step) - Test Data:
+
+Case Name: "Logout Test"
+Case Type: [any valid type]
+Region: [any valid region]
+Country: [any valid country]
+Department: [any valid department]
+Billing Unit: [any valid billing unit]
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The Add Case form opens.
+Entered values are accepted in all fields.
+Logging out clears all session variables.
+After logging back in, the Add Case form is empty and no previous data is present.
+No partial case is created in the database.
+Test Script (Plain Text):
+Begin creating a case, log out, and log back in. The form must be cleared of all previous data and session variables.

@@ -1,0 +1,49 @@
+Managing audit logs
+Audit logs show all the changes made in the system. Audit logs include the date, event, user who made the change, a reference identifier, and details of the change.
+
+The time zone for Third-Party Manager is UTC except for workflows. The time zone cannot be changed.
+
+View an audit log for a third-party
+To view the audit log for a specific third-party, follow these steps:
+
+From the Dashboard's left menu or the link at the top of the page, select Third Party Management.
+On the Third Party List grid, select the third-party.
+On the Record Detail tab, select the Audit Log tab.
+Select Include caseClosed logs to display the logs associated for a case. A case can be a formClosed (questionnaire) sent or an investigation, such as an Open Source Investigation.
+View an audit log for a third-party case
+To view the audit logs for a third-party's case, follow these steps:
+
+From the Dashboard's left menu or the link at the top of the page, select Case Management.
+On the Case List grid, select the case.
+On the Case Folder tab, select the Audit Log tab.
+View and export audit logs (system wide)
+You can filter system wide audit logs and export log information to a csv file. Filters include:
+
+A date range.
+Your events or all user events for the date range specified.
+One or more event types or all event types.
+(Optional) A specific Reference identifier. For a third-party, the Reference identifier is the Profile #.
+For a case, the Reference identifier is the Case #.
+Actions that are unrelated to a specific case or third-party display but are not assigned a Reference identifier. These include logging in, creating a risk modelClosed, updating a setting, updating a custom fieldClosed, adding a renewal rule, adding a new user, and so on.
+To view and, optionally export, an audit log:
+
+From the Dashboard's left menu or the link at the top of the page, select Settings.
+
+Select the Audit Log tab.
+
+Perform the following actions, as needed, then click the Refresh button.
+
+Enter dates in the From and through date fields to view events for the range.
+
+Select My Events to see the audit logs for events you performed. Deselect My Events to see all users' changes.
+
+Select Events and select events you want displayed:
+
+Check All (or check selected events): Display events with and without References identifiers.
+
+Uncheck All: Only items without Reference identifiers display. These include logging in, creating a risk model, updating a setting, updating a custom field, adding a renewal rule, adding a new user, and so on.
+
+Invert All: Select Invert All to deselect the selected items and select the items previously not selected.
+
+To search on a Reference identifier (Profile # or Case #), enter the identifier then select the Refresh button.
+To export the grid information displayed to a csv file, select the Export button.

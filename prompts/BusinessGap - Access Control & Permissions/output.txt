@@ -1,0 +1,166 @@
+Key: TPM-T4101
+Name: TPM_CM_Verify vendor user is denied access to add a new case
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a user with the "vendor" role and valid credentials.
+User has access to the dashboard but does not have permission to add cases.
+Objective:
+To verify that a vendor user is denied access to the "Add Case" functionality and receives an appropriate error message.
+
+Priority: P1
+
+Test Script (Step-by-Step) - Step:
+
+Log in as a user with the "vendor" role.
+Click on the Case Management Tab.
+Attempt to click the "Add Case" button.
+Observe the system response.
+Test Script (Step-by-Step) - Test Data:
+
+User role: vendor
+Username: [valid vendor username]
+Password: [valid password]
+Test Script (Step-by-Step) - Expected Result:
+
+The dashboard loads successfully.
+The Case Management tab is visible.
+The "Add Case" button is either not visible or, if visible, clicking it results in an error message: "Invalid Access!"
+No new case is created in the database.
+Test Script (Plain Text):
+A vendor user attempts to add a new case. The system must prevent access and display an explicit error message, ensuring no case is created.
+
+Key: TPM-T4102
+Name: TPM_CM_Verify read-only user is denied access to edit a case
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a user with "read-only" permissions.
+At least one case exists in the system.
+User has access to the Case Management tab.
+Objective:
+To verify that a read-only user cannot edit any case and receives an appropriate error message.
+
+Priority: P1
+
+Test Script (Step-by-Step) - Step:
+
+Log in as a user with "read-only" permissions.
+Click on the Case Management Tab.
+Locate and click on a case number under the Case List sub tab.
+Attempt to click the Edit action item.
+Observe the system response.
+Test Script (Step-by-Step) - Test Data:
+
+User role: read-only
+Username: [valid read-only username]
+Password: [valid password]
+Case: any existing case
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The case list is visible.
+The Edit action item is either not visible or, if visible, clicking it results in an error message: "Access denied."
+The Edit Case modal does not open.
+No changes are made to the case in the database.
+Test Script (Plain Text):
+A read-only user attempts to edit a case. The system must prevent editing and display an explicit error message, ensuring no changes are possible.
+
+Key: TPM-T4103
+Name: TPM_CM_Verify feature flag 'assoc3p' controls Third Party Profile association UI
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a Superadmin with valid credentials.
+The feature flag/ACL 'assoc3p' is disabled for the user.
+User has access to the Case Management tab and permission to add or edit cases.
+Objective:
+To verify that when the 'assoc3p' feature flag is disabled, the UI does not allow associating a Third Party Profile to a case.
+
+Priority: P2
+
+Test Script (Step-by-Step) - Step:
+
+Log in as a Superadmin with 'assoc3p' feature flag disabled.
+Click on the Case Management Tab.
+Click the "Add Case" button.
+Observe the Add Case form for the Third Party Profile association field.
+Attempt to associate a Third Party Profile.
+Test Script (Step-by-Step) - Test Data:
+
+User role: Superadmin
+Feature flag: assoc3p = false
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The Add Case form opens.
+The Third Party Profile association field is not visible or is disabled.
+The user cannot associate a Third Party Profile to the case.
+Test Script (Plain Text):
+With 'assoc3p' disabled, the user cannot associate a Third Party Profile when adding a case. The UI must hide or disable the association field.
+
+Key: TPM-T4104
+Name: TPM_CM_Verify feature flag 'caseTypeSelection' controls Case Type dropdown
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a Superadmin with valid credentials.
+The feature flag/ACL 'caseTypeSelection' is disabled for the user.
+User has access to the Case Management tab and permission to add or edit cases.
+Objective:
+To verify that when the 'caseTypeSelection' feature flag is disabled, the Case Type dropdown is not editable and is set to the recommended value.
+
+Priority: P2
+
+Test Script (Step-by-Step) - Step:
+
+Log in as a Superadmin with 'caseTypeSelection' feature flag disabled.
+Click on the Case Management Tab.
+Click the "Add Case" button.
+Observe the Case Type dropdown in the Add Case form.
+Test Script (Step-by-Step) - Test Data:
+
+User role: Superadmin
+Feature flag: caseTypeSelection = false
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The Add Case form opens.
+The Case Type dropdown is not editable and is set to the recommended value.
+The user cannot change the Case Type.
+Test Script (Plain Text):
+With 'caseTypeSelection' disabled, the user cannot change the Case Type when adding a case. The dropdown must be locked to the recommended value.
+
+Key: TPM-T4105
+Name: TPM_CM_Verify vendor user is denied access to accept or reject a case
+Status: Draft
+Precondition:
+
+User is logged into the TPM application as a user with the "vendor" role and valid credentials.
+At least one case exists in the system in a stage eligible for accept/reject actions.
+User has access to the Case Management tab.
+Objective:
+To verify that a vendor user cannot accept or reject any case and receives an appropriate error message.
+
+Priority: P1
+
+Test Script (Step-by-Step) - Step:
+
+Log in as a user with the "vendor" role.
+Click on the Case Management Tab.
+Locate and click on a case number under the Case List sub tab.
+Attempt to click the Accept or Reject action item.
+Observe the system response.
+Test Script (Step-by-Step) - Test Data:
+
+User role: vendor
+Username: [valid vendor username]
+Password: [valid password]
+Case: any case eligible for accept/reject
+Test Script (Step-by-Step) - Expected Result:
+
+The Case Management tab loads successfully.
+The Accept and Reject action items are either not visible or, if visible, clicking them results in an error message: "Access denied."
+No changes are made to the case in the database.
+Test Script (Plain Text):
+A vendor user attempts to accept or reject a case. The system must prevent the action and display an explicit error message, ensuring no changes are possible.

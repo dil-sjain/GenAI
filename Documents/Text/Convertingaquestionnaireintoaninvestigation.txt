@@ -1,0 +1,14 @@
+Converting a questionnaire into an investigation
+Steps to convert a Third-Party Manager caseClosed for further due diligence investigation follows. This is typically done when reviewing the questionnaire.
+
+Important
+
+Street address and city are not required on the profile record, but they are required for a case investigation. An error occurs if the information is missing when a case is triggered.
+
+
+
+From the Case Folder tab, select the  Convert button to escalate a questionnaire from a third-party for further due diligence.
+
+Select the additional investigation necessary, Open Source Investigation or Enhanced Due Diligence. For details, see Investigations.
+
+Select Convert to Investigation. Verify the investigation details, which may include the fee, then select Submit to Investigator.

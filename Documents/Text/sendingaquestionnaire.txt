@@ -1,0 +1,26 @@
+Sending a questionnaire
+Questionnaires are online forms sent to a third-party to gather information and, possibly, ask the third-party to upload documents, such as a compliance policy. Question responses can be flagged and be ranked for the risk assessment.
+
+A third-party does not have to be a user of Third-Party Manager to receive and respond to a questionnaire. An external third-party is invited via email and assigned credentials to ensure confidentiality.
+
+Follow these steps to send a questionnaire, such as a due diligence questionnaire (DDQClosed).
+
+From the 3P Profile or 3P EngagementClosed (if enabled), select the Due Diligence tab then select Invite.
+
+On the Intake FormClosed Invitation Menu, select Go next to the questionnaire you want to send.
+
+On the SEND INTAKE FORM INVITATION, perform the following:
+
+Verify that the Point of Contact information is correct. If you need to change the information, go to the Record Detail tab, Summary tab and select Edit Profile to change the MAIN POINT OF CONTACT.
+
+Confirm the correct intake form is listed in Intake Form Version.
+
+Select the Language for the display of labels, tooltips, error messages, validation messages, and button text on the landing page. If the translation text is not available for the selection, the text for English language is displayed.
+
+Leave the Partner StatusClosed blank.
+
+Select Send Invitation. The third-party or internal contact is sent an email with a link and the password to log in to complete the questionnaire.
+
+Once the questionnaire has been sent, the third-party logs in and views the questionnaires to complete as well as questionnaires already submitted. The third-party completes the questionnaire and signs the attestation. If a required fieldClosed is not applicable to the third-party, the third-party can enter N/A or None.
+
+When you receive a notification that the form has been completed by the third-party, proceed to the next step, Reviewing the questionnaire.

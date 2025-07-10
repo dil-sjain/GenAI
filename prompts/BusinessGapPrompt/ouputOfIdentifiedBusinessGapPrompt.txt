@@ -1,0 +1,65 @@
+Gaps in Manual Test Coverage for Case Management
+Access Control & Permissions
+
+No tests for verifying that users with insufficient permissions (e.g., vendors, read-only users) are denied access to add, edit, accept, or reject cases.
+No tests for feature flag/ACL-driven UI or API changes (e.g., assoc3p, caseTypeSelection, b3pAccess).
+Session and State Handling
+
+No tests for session variable resets, sticky form data, or session timeouts during multi-step case creation/editing.
+No coverage for what happens if a user navigates away and returns mid-case creation or editing.
+Edge Cases in Case Creation
+
+No tests for creating a case with all optional fields left blank (beyond required fields).
+No tests for creating a case with maximum field lengths, special characters, or invalid data types.
+No test for the scenario where a user tries to create a case without linking a required Third Party Profile (when 3P is enabled).
+Case Editing/Updating
+
+No tests for editing a case after it has moved past certain workflow stages (e.g., after ASSIGNED).
+No tests for editing a case and changing the case type to one that requires or does not require subInfo, and the resulting navigation/validation.
+Case Stage Transitions
+
+No explicit tests for all possible case stage transitions (e.g., DDQ Invite → Qualification → Budget Requested → Budget Approved → Accepted by Investigator, etc.).
+No tests for re-opening a closed case or handling the "open" and "opensync" reject codes.
+No tests for the "on hold" status and its unique workflow.
+Bulk/Multi-Case Operations
+
+No tests for multi-case assignment (e.g., vendor admin assigning multiple cases at once, as supported in caselist-ws.php).
+Advanced Search & Filtering
+
+No tests for advanced search features, including:
+Searching by all available fields (e.g., case number, company name, requester, region, etc.).
+Using date filters, match case, and "me" filters (requestor, investigator, etc.).
+Sorting by all available columns and verifying correct order.
+Pagination edge cases (e.g., last page, empty page, page size changes).
+API/Backend Error Handling
+
+No tests for backend/API failures (e.g., database errors, invalid tokens, missing session data).
+No tests for invalid or expired page tokens (e.g., addcaseAuth, edcaseAuth, rejectCaseAuth).
+Attachment Handling
+
+No tests for uploading attachments with edge cases:
+Uploading files with unsupported types or corrupted files.
+Uploading files with the same name as existing attachments.
+Removing or replacing attachments after initial upload.
+Handling upload failures due to network or server errors.
+Case Linkage and Inheritance
+
+No tests for cases linked to engagements, including data inheritance (Type, Category, Region, Department).
+No tests for deleting or unlinking cases that are part of a renewal sequence.
+Localization/Internationalization
+
+No tests for language selection, translation display, or bilingual report requests.
+Notifications & Emails
+
+No tests for verifying that notification emails are sent at the correct workflow stages (e.g., investigation accepted, report available, etc.).
+Billing Unit & Purchase Order Logic
+
+No tests for scenarios where billing unit or PO fields are required, optional, or have special validation (e.g., text required for certain billing units).
+Custom Tabs and Fields
+
+No tests for custom tabs or fields in the Case Folder, especially for manually created cases vs. those created from engagements.
+Security
+
+No tests for direct URL access to restricted actions (e.g., accessing editcase.php or rejectcase.php with invalid or missing IDs).
+Recommendation:
+Review and expand the manual test suite to cover these gaps, especially around permissions, edge cases, workflow transitions, error handling, and advanced search/filtering. This will ensure more robust coverage and reduce the risk of critical defects escaping to production.

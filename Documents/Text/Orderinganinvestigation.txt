@@ -1,0 +1,20 @@
+Ordering an investigation
+Follow your organizations recommended process to order a due diligence caseClosed for further investigation. The scope of due diligence is populated based on the risk ratingClosed of the 3P Profile or, if enabled, the 3P EngagementClosed.
+
+From Record Detail tab from the 3P Profile or 3P Engagement, select the Due Diligence tab.
+
+Select the  Add Case button on the upper right of the window. If you see a broken link symbol in the list, select the symbol to link the case to the third-party.
+
+Enter or verify the TypeClosed of Case. If you change the type of case, enter why in the Brief Note text box.
+
+Complete the information then select Create Case | Enter Company Details.
+
+Continue to select Continue | Enter Details, until the entries are complete. You can attach documents to the case for review by the investigator.
+
+Review the INVESTIGATION ORDER and select the checkbox to attest that you reviewed the order.
+
+select Submit to Investigator. A Case Number for the investigation is created.
+
+You will get an email notification when the investigation is complete. The next action is to review the investigation report. See Reviewing an investigation report.
+
+For more details about due diligence cases, see Cases.
