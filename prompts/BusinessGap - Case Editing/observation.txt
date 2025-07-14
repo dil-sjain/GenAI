@@ -1,0 +1,42 @@
+Key: TPM-T4002
+Name: TPM_CM_Verify editing a case after it has moved past the ASSIGNED stage is restricted and proper error is shown
+Stage: Draft, and Rejected By Investigator (enhanced)
+Precondition:
+ 
+User is logged into the TPM application as a Superadmin with valid credentials.
+At least one case exists in the system with its stage set to "ASSIGNED" or any stage beyond "ASSIGNED" (e.g., "Accepted by Investigator", "Draft").
+User has access to the Case Management tab and permission to edit cases.
+Objective:
+To verify that editing a case after it has moved past the ASSIGNED stage is not allowed, and the system displays an appropriate error message.
+ 
+Priority: P1
+ 
+Test Script (Step-by-Step) - Step:
+ 
+Click on the Case Management Tab.
+In the Stage dropdown, select "ASSIGNED" or any later stage.
+Locate and click on a case number under the Case List sub tab.
+Click on the Edit action item.
+Observe the system response.
+Test Script (Step-by-Step) - Test Data:
+ 
+Use a case with the following attributes:
+Stage: "ASSIGNED"
+Case Name: "Edit Restriction Test Case"
+Case Number: [any valid number]
+Test Script (Step-by-Step) - Expected Result:
+ 
+The Case Management tab loads successfully.
+The Stage dropdown displays and allows selection of "ASSIGNED" or later stages.
+The case list updates to show cases in the selected stage.
+The user is able to click the Edit action item for a case in the "ASSIGNED" or later stage.
+The system does NOT open the Edit Case modal.
+An error message is displayed: "Access denied. You cannot edit a case after it has been assigned."
+No changes are made to the case in the database.
+Test Script (Plain Text):
+Attempt to edit a case that is in the "ASSIGNED" or later stage. The system must prevent editing and display an explicit error message, ensuring no changes are possible to the case record.
+
+
+
+*Without subInfo type Case would not proceed*
+Key: TPM-T4004

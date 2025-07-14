@@ -1,0 +1,41 @@
+{
+  "name": "John Doe",
+  "email": "john.doe@example.com", 
+  "username": "automationsuperadmin@diligent.com",
+  "password": "Welcome@12345",
+  "tpmCredentials": {
+    "superAdmin": {
+      "username": "automationsuperadmin@diligent.com",
+      "password": "Welcome@12345",
+      "role": "superadmin"
+    }
+  },
+  "vendorUser": {
+    "username": "vendor_user",
+    "password": "vendor_pass",
+    "role": "vendor"
+  },
+  "adminUser": {
+    "username": "automationsuperadmin@diligent.com", 
+    "password": "Welcome@12345",
+    "role": "superadmin"
+  },
+  "readOnlyUser": {
+    "username": "readonly_user",
+    "password": "readonly_pass",
+    "role": "read-only"
+  },
+  "testCase": {
+    "caseNumber": "CASE-12345",
+    "caseType": "Due Diligence",
+    "status": "In Progress"
+  },
+  "featureFlags": {
+    "assoc3p": false,
+    "caseTypeSelection": false
+  },
+  "application": {
+    "baseUrl": "https://dev3.steeleglobal.net",
+    "dashboardUrl": "https://dev3.steeleglobal.net/dashboard"
+  }
+}

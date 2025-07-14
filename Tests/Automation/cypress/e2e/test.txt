@@ -1,0 +1,18 @@
+@workspace
+ 
+# PERSONA
+Act as a Senior Cypress Automation Engineer.
+ 
+# CONTEXT
+I am in the file `cypress\e2e\editingCase.cy.js`. The manual test case to be automated is provided in a comment at the top of this file. The relevant PHP code is located in devcode/app/Controllers/TPM and devcode/public_html/cms/case.
+ 
+# RULES & BEST PRACTICES
+- Write a complete Cypress test within `describe()` and `it()` blocks. The `it()` block description should match the manual test case 'TPM_CM_Verify editing a case and changing the case type to one that requires subInfo navigates to the correct form'.
+
+- **Leverage our existing custom commands** from code snippets given in `cypress\e2e\editingCase.cy.js` for Login in to the System
+- Use `cy.intercept()` to mock any necessary API requests to ensure consistent test data and speed.
+- Add clear assertions (`.should()`) to validate each step in the 'Expected Results'.
+- Add `cy.log()` statements to narrate the key steps of the test.
+ 
+# TASK
+Based on all the context and rules above, write the complete Cypress test code for the manual test case provided in the active file.

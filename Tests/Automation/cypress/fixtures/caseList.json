@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "caseNumber": "CASE-001",
+    "caseName": "SubInfo Navigation Test",
+    "caseType": "Enhanced Due Diligence",
+    "stage": "Draft",
+    "assignee": "Test User",
+    "dateCreated": "2025-01-01",
+    "priority": "Medium"
+  },
+  {
+    "id": 2,
+    "caseNumber": "CASE-002", 
+    "caseName": "Another Test Case",
+    "caseType": "Standard Review",
+    "stage": "Draft",
+    "assignee": "Test User 2",
+    "dateCreated": "2025-01-02",
+    "priority": "High"
+  }
+]

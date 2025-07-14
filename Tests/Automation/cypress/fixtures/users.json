@@ -1,0 +1,22 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "vendor_user",
+      "role": "vendor",
+      "permissions": ["view_dashboard"]
+    },
+    {
+      "id": 2,
+      "username": "admin_user",
+      "role": "superadmin",
+      "permissions": ["view_dashboard", "add_case", "edit_case", "delete_case"]
+    },
+    {
+      "id": 3,
+      "username": "readonly_user", 
+      "role": "read-only",
+      "permissions": ["view_dashboard", "view_case"]
+    }
+  ]
+}

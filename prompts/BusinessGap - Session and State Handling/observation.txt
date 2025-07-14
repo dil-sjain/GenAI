@@ -1,0 +1,114 @@
+Key: TPM-T4202
+Name: TPM_CM_Verify session variables are reset when starting a new case creation
+Status: Draft
+Precondition:
+ 
+User is logged into the TPM application as a Superadmin with valid credentials.
+User has access to the Case Management tab and permission to add cases.
+At least one case has been partially created but not submitted.
+Objective:
+To verify that starting a new case creation resets all session variables and clears any sticky form data from previous attempts.
+ 
+Priority: P1
+ 
+Test Script (Step-by-Step) - Step:
+*Go to 3P Management, open 3P profile*
+*Click on Add Case button*
+Click on the Case Management Tab.
+Click the "Add Case" button.
+Enter values in all required fields.
+Without submitting, close the Add Case form.
+Click the "Add Case" button again.
+Observe the form fields.
+Test Script (Step-by-Step) - Test Data:
+ 
+Case Name: "Reset Test"
+Case Type: [any valid type]
+Region: [any valid region]
+Country: [any valid country]
+Department: [any valid department]
+Billing Unit: [any valid billing unit]
+Test Script (Step-by-Step) - Expected Result:
+ 
+*3P managemnt tab loads and 3p profile opens successfully*
+The Add Case form opens.
+Entered values are accepted in all fields.
+Closing the form by clicking on Save and close and does not submit the data.
+Reopening the Add Case form, all fields are reset to their default (empty) state.
+No previous data is present in any field.
+all previous entered fields will be visible
+Test Script (Plain Text):
+Start a new case, enter data, close the form, and start again. The form must be cleared of all previous data.
+
+
+
+*If Case creation Popup is open user won't be able to click on to Signout Button due to iframe.
+So, in that case there are two options either close Case without
+saving by clicking on Cancel or Save and close
+Or on Refresh also its gone*
+Key: TPM-T4204
+
+Name: TPM_CM_Verify session variables and sticky data are cleared when user logs out mid-case creation
+
+Status: Draft
+
+Precondition:
+ 
+User is logged into the TPM application as a Superadmin with valid credentials.
+
+User has access to the Case Management tab and permission to add cases.
+
+Objective:
+
+To verify that logging out during case creation clears all session variables and sticky form data.
+ 
+Priority: P2
+ 
+Test Script (Step-by-Step) - Step:
+ 
+Click on the Case Management Tab.
+
+Click the "Add Case" button.
+
+Enter values in all required fields.
+
+Without submitting, log out of the application.
+
+Log back in as the same user.
+
+Click the "Add Case" button.
+
+Observe the form fields.
+
+Test Script (Step-by-Step) - Test Data:
+ 
+Case Name: "Logout Test"
+
+Case Type: [any valid type]
+
+Region: [any valid region]
+
+Country: [any valid country]
+
+Department: [any valid department]
+
+Billing Unit: [any valid billing unit]
+
+Test Script (Step-by-Step) - Expected Result:
+ 
+The Case Management tab loads successfully.
+
+The Add Case form opens.
+
+Entered values are accepted in all fields.
+
+Logging out clears all session variables.
+
+After logging back in, the Add Case form is empty and no previous data is present.
+
+No partial case is created in the database.
+
+Test Script (Plain Text):
+
+Begin creating a case, log out, and log back in. The form must be cleared of all previous data and session variables.
+ 

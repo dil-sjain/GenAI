@@ -1,0 +1,15 @@
+{
+  "id": 1,
+  "caseNumber": "CASE-001",
+  "caseName": "SubInfo Navigation Test",
+  "caseType": "Enhanced Due Diligence",
+  "caseTypeId": 1,
+  "stage": "Draft",
+  "assignee": "Test User",
+  "dateCreated": "2025-01-01",
+  "priority": "Medium",
+  "description": "Test case for verifying subInfo navigation",
+  "client": "Test Client",
+  "jurisdiction": "US",
+  "status": "Active"
+}
